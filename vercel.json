@@ -2,8 +2,5 @@
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/.next",
   "framework": "nextjs",
-  "installCommand": "cd frontend && npm install",
-  "env": {
-    "NEXT_PUBLIC_API_URL": "https://server.stream-lineai.com/api/v1"
-  }
+  "installCommand": "echo 'install handled in buildCommand'"
 }
