@@ -25,9 +25,7 @@ app = FastAPI(
     redoc_url="/api/v1/redoc"
 )
 
-CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:8100").split(",") if o.strip()]
-
-# CORS middleware
+# CORS middleware — allow all origins (frontend may be on Vercel or localhost)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -36,24 +34,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Ensure CORS headers are present even on unhandled 500 errors
+# Ensure CORS headers are present even on error responses
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
-    origin = request.headers.get("origin", "")
-    headers = {}
-    if origin in CORS_ORIGINS:
-        headers["Access-Control-Allow-Origin"] = origin
-        headers["Access-Control-Allow-Credentials"] = "true"
+    origin = request.headers.get("origin", "*")
+    headers = {"Access-Control-Allow-Origin": origin}
     logger.exception("Unhandled error: %s", exc)
     return JSONResponse(status_code=500, content={"detail": str(exc)}, headers=headers)
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    origin = request.headers.get("origin", "")
-    headers = {}
-    if origin in CORS_ORIGINS:
-        headers["Access-Control-Allow-Origin"] = origin
-        headers["Access-Control-Allow-Credentials"] = "true"
+    origin = request.headers.get("origin", "*")
+    headers = {"Access-Control-Allow-Origin": origin}
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=headers)
 
 # Database setup
