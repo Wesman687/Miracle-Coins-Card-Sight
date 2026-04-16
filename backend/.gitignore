@@ -1,5 +1,8 @@
 # Backend .gitignore
 
+# Log files (created at runtime)
+logs/
+
 # Environment Variables
 .env
 .env.local
