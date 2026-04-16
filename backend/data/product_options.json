@@ -1,0 +1,65 @@
+{
+  "metals": [
+    {
+      "value": "gold",
+      "label": "Gold",
+      "basePrice": 14,
+      "bulkPricing": [
+        {
+          "qty": 5,
+          "price": 13
+        }
+      ]
+    },
+    {
+      "value": "platinum",
+      "label": "Platinum",
+      "basePrice": 8
+    },
+    {
+      "value": "silver",
+      "label": "Silver",
+      "basePrice": 4
+    }
+  ],
+  "types": [
+    {
+      "value": "card",
+      "label": "Card"
+    },
+    {
+      "value": "bundle",
+      "label": "Kit / Set"
+    }
+  ],
+  "discounts": [
+    {
+      "minTotal": 50,
+      "pct": 8
+    },
+    {
+      "minTotal": 100,
+      "pct": 10
+    },
+    {
+      "minTotal": 250,
+      "pct": 12
+    },
+    {
+      "minTotal": 500,
+      "pct": 15
+    },
+    {
+      "minTotal": 1000,
+      "pct": 20
+    },
+    {
+      "minTotal": 2500,
+      "pct": 25
+    },
+    {
+      "minTotal": 5000,
+      "pct": 30
+    }
+  ]
+}

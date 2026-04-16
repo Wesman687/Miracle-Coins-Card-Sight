@@ -1,0 +1,114 @@
+# Miracle Coins CoinSync Pro - Cursor Rules
+
+## TypeScript Requirements
+- **MANDATORY**: All code must use TypeScript with strict type checking
+- **MANDATORY**: All API responses must be properly typed
+- **MANDATORY**: All form data must use Zod schemas for validation
+- **MANDATORY**: All database models must have corresponding TypeScript interfaces
+- **MANDATORY**: All function parameters and return types must be explicitly typed
+- **MANDATORY**: Use enums for all status fields and constants
+- **MANDATORY**: All API calls must use typed response interfaces
+
+## Code Quality Standards
+- **MANDATORY**: Use ESLint and Prettier for code formatting
+- **MANDATORY**: All components must be functional components with TypeScript
+- **MANDATORY**: Use React Query for all API state management
+- **MANDATORY**: Implement proper error boundaries and loading states
+- **MANDATORY**: All user inputs must be validated with Zod schemas
+- **MANDATORY**: Use proper TypeScript generics for reusable components
+
+## Backend Standards
+- **MANDATORY**: All endpoints must use Pydantic models for request/response validation
+- **MANDATORY**: All database operations must use typed repositories
+- **MANDATORY**: All business logic must be in service classes
+- **MANDATORY**: All API responses must follow consistent error handling patterns
+- **MANDATORY**: All database models must use SQLAlchemy with proper typing
+- **MANDATORY**: All async operations must be properly handled with try/catch
+
+## Testing Requirements
+- **MANDATORY**: All new features must have corresponding tests
+- **MANDATORY**: Test coverage must be above 80%
+- **MANDATORY**: All API endpoints must have integration tests
+- **MANDATORY**: All business logic must have unit tests
+- **MANDATORY**: All TypeScript types must be tested for correctness
+
+## AI Integration Standards
+- **MANDATORY**: All AI evaluations must return typed responses
+- **MANDATORY**: AI confidence scores must be properly validated
+- **MANDATORY**: All AI suggestions must be logged for audit purposes
+- **MANDATORY**: AI evaluation results must be stored with proper typing
+
+## Security Standards
+- **MANDATORY**: All admin routes must verify JWT tokens
+- **MANDATORY**: All file uploads must be validated and typed
+- **MANDATORY**: All user inputs must be sanitized
+- **MANDATORY**: All database queries must use parameterized statements
+
+## Performance Standards
+- **MANDATORY**: All database queries must be optimized
+- **MANDATORY**: All API responses must be paginated when appropriate
+- **MANDATORY**: All images must be properly optimized
+- **MANDATORY**: All API calls must have proper loading states
+
+## Documentation Standards
+- **MANDATORY**: All TypeScript interfaces must be documented
+- **MANDATORY**: All API endpoints must have OpenAPI documentation
+- **MANDATORY**: All complex business logic must be commented
+- **MANDATORY**: All AI evaluation logic must be documented
+
+## File Organization
+- **MANDATORY**: All types must be in `/types` directory
+- **MANDATORY**: All API calls must be in `/lib/api.ts`
+- **MANDATORY**: All components must be in `/components` directory
+- **MANDATORY**: All hooks must be in `/hooks` directory
+- **MANDATORY**: All utilities must be in `/utils` directory
+
+## Error Handling
+- **MANDATORY**: All errors must be properly typed
+- **MANDATORY**: All API errors must be handled gracefully
+- **MANDATORY**: All form validation errors must be user-friendly
+- **MANDATORY**: All network errors must have retry logic
+
+## Accessibility Standards
+- **MANDATORY**: All form inputs must have proper labels
+- **MANDATORY**: All images must have alt text
+- **MANDATORY**: All interactive elements must be keyboard accessible
+- **MANDATORY**: All color contrasts must meet WCAG standards
+
+## Professional UI Standards
+- **MANDATORY**: All modals must be properly centered and responsive
+- **MANDATORY**: All loading states must have proper animations
+- **MANDATORY**: All success/error messages must be clearly visible
+- **MANDATORY**: All forms must have proper validation feedback
+- **MANDATORY**: All tables must be sortable and filterable
+- **MANDATORY**: All buttons must have proper hover states
+- **MANDATORY**: All inputs must have focus states
+- **MANDATORY**: All cards must have proper shadows and borders
+
+## AI Evaluation Standards
+- **MANDATORY**: All AI evaluations must show confidence scores
+- **MANDATORY**: All AI suggestions must be explainable
+- **MANDATORY**: All AI results must be actionable
+- **MANDATORY**: All AI evaluations must be logged for improvement
+
+## Collection Management
+- **MANDATORY**: All collections must be properly typed
+- **MANDATORY**: All collection operations must be validated
+- **MANDATORY**: All collection data must be properly structured
+- **MANDATORY**: All collection APIs must be RESTful
+
+## Deployment Standards
+- **MANDATORY**: All environment variables must be properly typed
+- **MANDATORY**: All configuration must be validated at startup
+- **MANDATORY**: All database migrations must be tested
+- **MANDATORY**: All API versions must be properly documented
+
+## Monitoring Standards
+- **MANDATORY**: All API calls must be logged
+- **MANDATORY**: All errors must be tracked
+- **MANDATORY**: All performance metrics must be monitored
+- **MANDATORY**: All user actions must be audited
+
+
+
+
