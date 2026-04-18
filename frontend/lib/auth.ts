@@ -1,5 +1,4 @@
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1270/api/v1'
-const AUTH_SERVER = process.env.NEXT_PUBLIC_AUTH_SERVER_URL || 'https://server.stream-lineai.com'
 
 export interface AuthUser {
   token: string
@@ -42,11 +41,9 @@ export function authHeaders(): Record<string, string> {
   return auth ? { Authorization: `Bearer ${auth.token}` } : {}
 }
 
-const ADMIN_EMAILS = ['paul@miracle-coins.com']
-
 /** Single login — handles both admin (stream-lineai) and customer (local) accounts. */
 export async function login(email: string, password: string): Promise<AuthUser> {
-  const res = await fetch(`${AUTH_SERVER}/api/auth/login`, {
+  const res = await fetch(`${API}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
@@ -56,30 +53,12 @@ export async function login(email: string, password: string): Promise<AuthUser> 
     throw new Error(err.detail || 'Invalid email or password')
   }
   const data = await res.json()
-  const token = data.token || data.access_token
-
-  // Fetch user profile to determine admin status
-  let userEmail = data.email || email
-  let userName = data.name
-  let isAdmin = false
-  try {
-    const meRes = await fetch(`${AUTH_SERVER}/api/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (meRes.ok) {
-      const meData = await meRes.json()
-      const profile = meData.user || meData
-      userEmail = profile.email || userEmail
-      userName = profile.name || profile.username || userName
-      isAdmin = profile.is_admin || profile.user_type === 'admin' || ADMIN_EMAILS.includes(userEmail.toLowerCase())
-    }
-  } catch {}
-
   const user: AuthUser = {
-    token,
-    role: isAdmin ? 'admin' : 'customer',
-    email: userEmail,
-    name: userName,
+    token: data.token,
+    role: data.role === 'admin' ? 'admin' : 'customer',
+    email: data.email || email,
+    name: data.name,
+    customerId: data.customerId,
   }
   setAuth(user)
   return user
