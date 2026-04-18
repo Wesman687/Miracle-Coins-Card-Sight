@@ -178,7 +178,7 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
     const next = metals.filter(m => m.value !== value)
     setMetals(next)
     persistOptions(next, types)
-    if (metal === value && next.length) setMetal(next[0].value)
+    if (selectedMetals.includes(value) && next.length) setSelectedMetals(prev => prev.filter(m => m !== value).concat(next[0].value))
   }
 
   function addType() {
