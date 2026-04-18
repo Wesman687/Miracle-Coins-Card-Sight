@@ -42,6 +42,8 @@ export function authHeaders(): Record<string, string> {
   return auth ? { Authorization: `Bearer ${auth.token}` } : {}
 }
 
+const ADMIN_EMAILS = ['paul@miracle-coins.com']
+
 /** Single login — handles both admin (stream-lineai) and customer (local) accounts. */
 export async function login(email: string, password: string): Promise<AuthUser> {
   const res = await fetch(`${AUTH_SERVER}/api/auth/login`, {
@@ -54,12 +56,30 @@ export async function login(email: string, password: string): Promise<AuthUser> 
     throw new Error(err.detail || 'Invalid email or password')
   }
   const data = await res.json()
+  const token = data.token || data.access_token
+
+  // Fetch user profile to determine admin status
+  let userEmail = data.email || email
+  let userName = data.name
+  let isAdmin = false
+  try {
+    const meRes = await fetch(`${AUTH_SERVER}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (meRes.ok) {
+      const meData = await meRes.json()
+      const profile = meData.user || meData
+      userEmail = profile.email || userEmail
+      userName = profile.name || profile.username || userName
+      isAdmin = profile.is_admin || profile.user_type === 'admin' || ADMIN_EMAILS.includes(userEmail.toLowerCase())
+    }
+  } catch {}
+
   const user: AuthUser = {
-    token: data.token,
-    role: data.role === 'admin' ? 'admin' : 'customer',
-    email: data.email || email,
-    name: data.name,
-    customerId: data.customerId,
+    token,
+    role: isAdmin ? 'admin' : 'customer',
+    email: userEmail,
+    name: userName,
   }
   setAuth(user)
   return user
