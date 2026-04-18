@@ -79,8 +79,37 @@ export default function ProductDetailPage() {
   const heroImage = gallery[activeImage] || null
   const canAddToCart = !!(product.id && product.priceValue)
 
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://miracle-coins.com'
+  const productJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: product.name,
+    description: product.description || `${product.metal} precious metal collectible card`,
+    image: gallery.length ? gallery : undefined,
+    brand: { '@type': 'Brand', name: 'Miracle Coins' },
+    url: `${siteUrl}/products/${product.slug}`,
+    ...(product.priceValue != null && {
+      offers: {
+        '@type': 'Offer',
+        priceCurrency: 'USD',
+        price: product.priceValue.toFixed(2),
+        availability: product.quantity > 0
+          ? 'https://schema.org/InStock'
+          : 'https://schema.org/OutOfStock',
+        url: `${siteUrl}/products/${product.slug}`,
+      },
+    }),
+  }
+
   return (
-    <PublicLayout title={`${product.name} — Miracle Coins`} description={product.description}>
+    <PublicLayout
+      title={`${product.name} — Miracle Coins`}
+      description={product.description || `Buy ${product.name} — a real ${product.metal} precious metal collectible card.`}
+      ogImage={gallery[0]}
+      ogType="product"
+      canonicalPath={`/products/${product.slug}`}
+      jsonLd={productJsonLd}
+    >
       <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
         <div className="mb-6 text-sm text-stone-400">
           <Link href="/shop" className="no-underline text-stone-400 hover:text-stone-700">Shop</Link>

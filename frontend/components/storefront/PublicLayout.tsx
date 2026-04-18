@@ -9,6 +9,10 @@ import CartDrawer from './CartDrawer'
 interface PublicLayoutProps {
   title?: string
   description?: string
+  ogImage?: string
+  ogType?: 'website' | 'product'
+  canonicalPath?: string
+  jsonLd?: object
   children: ReactNode
 }
 
@@ -40,12 +44,21 @@ function CartIcon() {
 export default function PublicLayout({
   title = 'Miracle Coins',
   description = 'Real gold, platinum, and silver collectible cards.',
+  ogImage,
+  ogType = 'website',
+  canonicalPath,
+  jsonLd,
   children,
 }: PublicLayoutProps) {
   const router = useRouter()
   const [admin, setAdmin] = useState(false)
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setAdmin(isAdmin()); setMounted(true) }, [])
+
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://miracle-coins.com'
+  const canonical = canonicalPath ? `${siteUrl}${canonicalPath}` : `${siteUrl}${router.asPath.split('?')[0]}`
+  const defaultOgImage = `${siteUrl}/og-default.png`
+  const resolvedOgImage = ogImage || defaultOgImage
 
   const navLinks = [
     { href: '/shop', label: 'All', exact: true },
@@ -60,6 +73,29 @@ export default function PublicLayout({
       <Head>
         <title>{title}</title>
         <meta name="description" content={description} />
+        <link rel="canonical" href={canonical} />
+
+        {/* Open Graph */}
+        <meta property="og:title" content={title} />
+        <meta property="og:description" content={description} />
+        <meta property="og:type" content={ogType} />
+        <meta property="og:url" content={canonical} />
+        <meta property="og:image" content={resolvedOgImage} />
+        <meta property="og:site_name" content="Miracle Coins" />
+
+        {/* Twitter Card */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={title} />
+        <meta name="twitter:description" content={description} />
+        <meta name="twitter:image" content={resolvedOgImage} />
+
+        {/* JSON-LD */}
+        {jsonLd && (
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          />
+        )}
       </Head>
 
       <div className="min-h-screen bg-stone-50 text-stone-900">
