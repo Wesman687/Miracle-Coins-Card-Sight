@@ -1,4 +1,5 @@
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1270/api/v1'
+const AUTH = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL || 'https://server.stream-lineai.com'
 
 export interface AuthUser {
   token: string
@@ -43,7 +44,7 @@ export function authHeaders(): Record<string, string> {
 
 /** Single login — handles both admin (stream-lineai) and customer (local) accounts. */
 export async function login(email: string, password: string): Promise<AuthUser> {
-  const res = await fetch(`${API}/auth/login`, {
+  const res = await fetch(`${AUTH}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
