@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import PublicLayout from '../../components/storefront/PublicLayout'
 import { StoreProduct } from '../../data/storefront'
-import { fetchStorefrontProduct } from '../../lib/storefront'
+import { fetchStorefrontProduct, resolveImageUrl } from '../../lib/storefront'
 import { useCart } from '../../lib/cart'
 
 export default function ProductDetailPage() {
@@ -29,7 +29,7 @@ export default function ProductDetailPage() {
   const gallery = useMemo(() => {
     if (!product) return []
     const imgs = product.images?.length ? product.images : product.image ? [product.image] : []
-    return imgs.filter(Boolean) as string[]
+    return imgs.filter(Boolean).map(url => resolveImageUrl(url)).filter(Boolean) as string[]
   }, [product])
 
   function handleAddToCart() {

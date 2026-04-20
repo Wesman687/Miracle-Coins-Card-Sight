@@ -1,6 +1,13 @@
 import { StoreProduct } from '../data/storefront'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1270/api/v1'
+const MEDIA_BASE = API_BASE.replace(/\/api\/v1$/, '')
+
+export function resolveImageUrl(url: string | null | undefined): string | null {
+  if (!url) return null
+  if (url.startsWith('http')) return url
+  return `${MEDIA_BASE}${url.startsWith('/') ? '' : '/'}${url}`
+}
 
 export async function fetchStorefrontProducts(metal?: string, options?: { featuredOnly?: boolean }): Promise<StoreProduct[]> {
   try {

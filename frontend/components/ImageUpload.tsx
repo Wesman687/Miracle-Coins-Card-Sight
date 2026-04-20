@@ -6,6 +6,7 @@ import {
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline'
 import { api } from '../lib/api'
+import { resolveImageUrl } from '../lib/storefront'
 import toast from 'react-hot-toast'
 
 interface ImageUploadProps {
@@ -75,11 +76,7 @@ export default function ImageUpload({
       const uploadedFile = response.data.data
       
       // Construct full URL for the uploaded image
-      const apiBase = (process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:1270').replace(/\/$/, '')
-      const rawUrl = uploadedFile.public_url.startsWith('http')
-        ? uploadedFile.public_url
-        : `${apiBase}${uploadedFile.public_url}`
-      const fullImageUrl = rawUrl.replace(/^http:\/\//i, 'https://')
+      const fullImageUrl = resolveImageUrl(uploadedFile.public_url) || uploadedFile.public_url
 
       const imageData: UploadedImage = {
         url: fullImageUrl,

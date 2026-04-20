@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { StoreProduct } from '../../data/storefront'
 import { useCart } from '../../lib/cart'
+import { resolveImageUrl } from '../../lib/storefront'
 
 const metalAccent: Record<string, string> = {
   gold: 'text-amber-600',
@@ -21,7 +22,7 @@ interface Props {
 }
 
 export default function ProductCard({ product, isAdmin, onEdit }: Props) {
-  const image = product.image || product.images?.[0] || null
+  const image = resolveImageUrl(product.image || product.images?.[0])
   const accent = metalAccent[product.metal] ?? 'text-stone-500'
   const { addItem } = useCart()
 
