@@ -75,10 +75,11 @@ export default function ImageUpload({
       const uploadedFile = response.data.data
       
       // Construct full URL for the uploaded image
-      const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:1270'
-      const fullImageUrl = uploadedFile.public_url.startsWith('http')
+      const apiBase = (process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:1270').replace(/\/$/, '')
+      const rawUrl = uploadedFile.public_url.startsWith('http')
         ? uploadedFile.public_url
         : `${apiBase}${uploadedFile.public_url}`
+      const fullImageUrl = rawUrl.replace(/^http:\/\//i, 'https://')
 
       const imageData: UploadedImage = {
         url: fullImageUrl,
