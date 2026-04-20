@@ -5,6 +5,10 @@ const MEDIA_BASE = API_BASE.replace(/\/api\/v1$/, '')
 
 export function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null
+  // Fix full URLs that point to /uploads/ without the /miracle-coins/ prefix
+  if (url.match(/https?:\/\/server\.stream-lineai\.com\/uploads\//)) {
+    return url.replace(/https?:\/\/server\.stream-lineai\.com\/uploads\//, `${MEDIA_BASE}/uploads/`)
+  }
   if (url.startsWith('http')) return url
   return `${MEDIA_BASE}${url.startsWith('/') ? '' : '/'}${url}`
 }
