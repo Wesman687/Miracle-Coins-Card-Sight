@@ -532,7 +532,7 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
                         className="w-40 rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:border-amber-400 focus:outline-none"
                       />
                     )}
-                    <p className="mt-1 text-xs text-stone-400">Minimum offer eBay will show buyers</p>
+                    <p className="mt-1 text-xs text-stone-400">Buyers cannot submit offers below this price</p>
                   </div>
                 </div>
               )}

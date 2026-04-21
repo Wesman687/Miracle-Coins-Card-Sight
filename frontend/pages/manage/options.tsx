@@ -236,7 +236,7 @@ export default function CatalogOptionsPage() {
           <div className="mb-4 grid grid-cols-3 gap-2 text-xs font-medium text-stone-400 uppercase tracking-wider px-3">
             <span>Metal</span>
             <span>Price</span>
-            <span>Min. Offer</span>
+            <span>Min. Offer (eBay)</span>
           </div>
 
           <div className="space-y-2 mb-5">

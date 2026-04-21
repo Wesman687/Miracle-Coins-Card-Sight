@@ -544,7 +544,7 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
                     Standard
                   </label>
                 )}
-                <span className="text-xs text-stone-400">Minimum offer eBay will show buyers</span>
+                <span className="text-xs text-stone-400">Buyers cannot submit offers below this price</span>
               </div>
             )
           })()}
