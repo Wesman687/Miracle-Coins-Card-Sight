@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useCart } from '../../lib/cart'
-import { isAdmin as checkAdmin, getAuth, authHeaders } from '../../lib/auth'
+import { isAdmin as checkAdmin, getAuth, authHeaders, getCustomerId } from '../../lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1270/api/v1'
 const FRONTEND_BASE = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:8100'
@@ -48,9 +48,10 @@ export default function CartDrawer({ open, onClose }: Props) {
     const a = getAuth()
     setAdmin(checkAdmin())
     setAuthUser(a)
+    const cid = getCustomerId(a)
     // Fetch customer profile to pre-fill contact info
-    if (a?.customerId) {
-      fetch(`${API}/auth/customer/profile/${a.customerId}`, {
+    if (cid) {
+      fetch(`${API}/auth/customer/profile/${cid}`, {
         headers: { Authorization: `Bearer ${a.token}` },
       })
         .then(r => r.ok ? r.json() : null)
@@ -138,8 +139,9 @@ export default function CartDrawer({ open, onClose }: Props) {
       // Save any newly-entered contact info to account
       const newPhone = !profilePhone && phone ? phone : undefined
       const newAddr  = !profileAddr && addr1 ? { address_line1: addr1, city, state_province: state, zip_code: zip } : undefined
-      if ((newPhone || newAddr) && authUser?.customerId) {
-        fetch(`${API}/auth/customer/profile/${authUser.customerId}`, {
+      const cid = authUser ? getCustomerId(authUser) : undefined
+      if ((newPhone || newAddr) && cid) {
+        fetch(`${API}/auth/customer/profile/${cid}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', ...authHeaders() },
           body: JSON.stringify({ phone: newPhone, ...newAddr }),

@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
 import PublicLayout from '../../components/storefront/PublicLayout'
-import { getAuth, clearAuth, authHeaders, AuthUser } from '../../lib/auth'
+import { getAuth, clearAuth, authHeaders, AuthUser, getCustomerId } from '../../lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1270/api/v1'
 
@@ -70,9 +70,10 @@ export default function AccountPage() {
     setAuth(a)
     setMounted(true)
     if (!a) { router.replace('/account/login'); return }
-    if (a.customerId) {
+    const cid = getCustomerId(a)
+    if (cid) {
       setLoadingOrders(true)
-      fetch(`${API}/auth/customer/orders/${a.customerId}`, {
+      fetch(`${API}/auth/customer/orders/${cid}`, {
         headers: { Authorization: `Bearer ${a.token}` },
       })
         .then(r => r.json())
@@ -81,7 +82,7 @@ export default function AccountPage() {
         .finally(() => setLoadingOrders(false))
 
       // Fetch contact profile
-      fetch(`${API}/auth/customer/profile/${a.customerId}`, {
+      fetch(`${API}/auth/customer/profile/${cid}`, {
         headers: { Authorization: `Bearer ${a.token}` },
       })
         .then(r => r.ok ? r.json() : null)
@@ -105,11 +106,12 @@ export default function AccountPage() {
   }
 
   async function saveContact() {
-    if (!auth?.customerId) return
+    const cid = auth ? getCustomerId(auth) : undefined
+    if (!cid) return
     setSavingContact(true)
     setContactError('')
     try {
-      const res = await fetch(`${API}/auth/customer/profile/${auth.customerId}`, {
+      const res = await fetch(`${API}/auth/customer/profile/${cid}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({

@@ -54,7 +54,13 @@ export default function CustomerRegisterPage() {
       }
       const data = await res.json()
       const { setAuth } = await import('../../lib/auth')
-      setAuth({ token: data.token, role: 'customer', email, name: data.name, customerId: data.customer_id })
+      setAuth({
+        token: data.token,
+        role: 'customer',
+        email,
+        name: data.name,
+        customerId: typeof data.customerId === 'number' ? data.customerId : undefined,
+      })
       router.push('/account')
     } catch (err: any) {
       setError(err.message || 'Registration failed')

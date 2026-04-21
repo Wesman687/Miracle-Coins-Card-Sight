@@ -41,6 +41,26 @@ export function authHeaders(): Record<string, string> {
   return auth ? { Authorization: `Bearer ${auth.token}` } : {}
 }
 
+/**
+ * Customer id for account / orders / profile. Prefer stored value; otherwise read
+ * from JWT (signup used to omit customerId in localStorage, but the token always had customer_id).
+ */
+export function getCustomerId(auth: AuthUser | null): number | undefined {
+  if (!auth || auth.role !== 'customer') return undefined
+  if (typeof auth.customerId === 'number') return auth.customerId
+  if (!auth.token) return undefined
+  try {
+    const part = auth.token.split('.')[1]
+    if (!part) return undefined
+    const b64 = part.replace(/-/g, '+').replace(/_/g, '/')
+    const json = typeof atob !== 'undefined' ? atob(b64) : Buffer.from(b64, 'base64').toString('utf8')
+    const p = JSON.parse(json) as { customer_id?: number }
+    return typeof p.customer_id === 'number' ? p.customer_id : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** Single login — handles both admin (stream-lineai) and customer (local) accounts. */
 export async function login(email: string, password: string): Promise<AuthUser> {
   const res = await fetch(`${API}/auth/login`, {
@@ -85,7 +105,13 @@ export async function customerRegister(email: string, name: string, password: st
     throw new Error(err.detail || 'Registration failed')
   }
   const data = await res.json()
-  const user: AuthUser = { token: data.token, role: 'customer', email, name: data.name }
+  const user: AuthUser = {
+    token: data.token,
+    role: 'customer',
+    email,
+    name: data.name,
+    customerId: typeof data.customerId === 'number' ? data.customerId : undefined,
+  }
   setAuth(user)
   return user
 }

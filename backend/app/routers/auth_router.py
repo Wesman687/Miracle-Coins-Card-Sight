@@ -282,7 +282,12 @@ async def customer_register(req: CustomerRegisterRequest, db: Session = Depends(
         f'Email: {req.email.lower().strip()}'
     )
 
-    return {'token': token, 'role': 'customer', 'name': req.name.strip()}
+    return {
+        'token': token,
+        'role': 'customer',
+        'name': req.name.strip(),
+        'customerId': row.id,
+    }
 
 
 @router.post('/auth/customer/login')
@@ -376,8 +381,15 @@ async def update_customer_profile(
 
 
 @router.get('/auth/customer/orders/{customer_id}')
-async def customer_orders(customer_id: int, db: Session = Depends(get_db)):
+async def customer_orders(customer_id: int, request: Request, db: Session = Depends(get_db)):
     """Return all orders (stripe + inquiry) for a specific customer."""
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        raise HTTPException(status_code=401, detail='Not authenticated')
+    payload = decode_token(auth_header[7:])
+    if not payload or payload.get('customer_id') != customer_id:
+        raise HTTPException(status_code=403, detail='Forbidden')
+
     ensure_customers_table(db)
     try:
         rows = db.execute(
