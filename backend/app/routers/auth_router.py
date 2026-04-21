@@ -333,6 +333,7 @@ async def get_customer_profile(customer_id: int, request: Request, db: Session =
 
 
 class CustomerProfileUpdateRequest(BaseModel):
+    name: Optional[str] = None
     phone: Optional[str] = None
     address_line1: Optional[str] = None
     address_line2: Optional[str] = None
@@ -349,7 +350,7 @@ async def update_customer_profile(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    """Update phone and/or address for a customer."""
+    """Update name, phone, and/or address for a customer."""
     auth_header = request.headers.get('Authorization', '')
     if not auth_header.startswith('Bearer '):
         raise HTTPException(status_code=401, detail='Not authenticated')
@@ -360,7 +361,7 @@ async def update_customer_profile(
     ensure_customers_table(db)
     fields, params = [], {'id': customer_id}
     for attr, col in [
-        ('phone', 'phone'), ('address_line1', 'address_line1'), ('address_line2', 'address_line2'),
+        ('name', 'name'), ('phone', 'phone'), ('address_line1', 'address_line1'), ('address_line2', 'address_line2'),
         ('city', 'city'), ('state_province', 'state_province'), ('zip_code', 'zip_code'), ('country', 'country'),
     ]:
         val = getattr(req, attr)

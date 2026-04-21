@@ -1714,6 +1714,7 @@ class InquiryCheckoutRequest(BaseModel):
     name: str
     email: str
     phone: Optional[str] = None
+    address: Optional[str] = None
     note: Optional[str] = None
 
 
@@ -1772,7 +1773,8 @@ async def create_checkout_inquiry(
     _discord_notify(
         f'**New Order Request** :shopping_cart:\n'
         f'From: {contact_str}\n'
-        f'Items:\n{cart_str}\n'
+        + (f'Ship to: {req.address}\n' if req.address else '')
+        + f'Items:\n{cart_str}\n'
         f'**Total: ${order_total:.2f}**'
         + (f'\nNote: {req.note}' if req.note else '')
     )
@@ -1800,7 +1802,10 @@ async def create_checkout_inquiry(
                 'pname': name,
                 'qty': item.qty,
                 'price': price if price else None,
-                'notes': req.note or None,
+                'notes': '\n'.join(filter(None, [
+                    f'Ship to: {req.address}' if req.address else None,
+                    req.note or None,
+                ])) or None,
             })
         db.commit()
     except Exception:
@@ -1857,14 +1862,35 @@ async def admin_list_orders(
     rows = db.execute(text(f"""
         SELECT o.id, o.external_order_id, o.customer_id, o.customer_email, o.customer_name,
                o.coin_id, o.product_name, o.qty, o.sold_price, o.channel,
-               o.status, o.tracking_number, o.notes, o.created_at, o.updated_at
+               o.status, o.tracking_number, o.notes, o.created_at, o.updated_at,
+               c.name AS customer_profile_name,
+               c.phone AS customer_phone,
+               c.address_line1, c.address_line2, c.city, c.state_province, c.zip_code, c.country
         FROM orders o
+        LEFT JOIN customers c ON (
+            c.id = o.customer_id
+            OR (o.customer_id IS NULL AND LOWER(c.email) = LOWER(o.customer_email))
+        )
         {where_sql}
         ORDER BY {order_by}
         LIMIT :limit OFFSET :offset
     """), params).fetchall()
 
     total = db.execute(text(f'SELECT COUNT(*) FROM orders o {where_sql}'), {k: v for k, v in params.items() if k not in ('limit', 'offset')}).scalar()
+
+    def _addr(r) -> Optional[str]:
+        parts = []
+        if getattr(r, 'address_line1', None): parts.append(r.address_line1)
+        if getattr(r, 'address_line2', None): parts.append(r.address_line2)
+        city = getattr(r, 'city', None) or ''
+        state = getattr(r, 'state_province', None) or ''
+        zip_code = getattr(r, 'zip_code', None) or ''
+        city_line = ', '.join(filter(None, [city, state]))
+        if zip_code: city_line = (city_line + ' ' + zip_code).strip()
+        if city_line: parts.append(city_line)
+        country = getattr(r, 'country', None)
+        if country and country != 'United States': parts.append(country)
+        return ', '.join(parts) if parts else None
 
     return {
         'orders': [
@@ -1873,7 +1899,9 @@ async def admin_list_orders(
                 'external_order_id': r.external_order_id,
                 'customer_id': r.customer_id,
                 'customer_email': r.customer_email,
-                'customer_name': r.customer_name,
+                'customer_name': r.customer_name or getattr(r, 'customer_profile_name', None),
+                'customer_phone': getattr(r, 'customer_phone', None),
+                'customer_address': _addr(r),
                 'coin_id': r.coin_id,
                 'product_name': r.product_name,
                 'qty': r.qty,

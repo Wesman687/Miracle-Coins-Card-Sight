@@ -11,6 +11,8 @@ type OrderRow = {
   customer_id: number | null
   customer_email: string | null
   customer_name: string | null
+  customer_phone: string | null
+  customer_address: string | null
   coin_id: number | null
   product_name: string | null
   qty: number
@@ -28,6 +30,8 @@ type OrderGroup = {
   rows: OrderRow[]
   customer_name: string | null
   customer_email: string | null
+  customer_phone: string | null
+  customer_address: string | null
   channel: string
   status: string
   total: number
@@ -69,6 +73,8 @@ function groupOrders(rows: OrderRow[]): OrderGroup[] {
       rows,
       customer_name: first.customer_name,
       customer_email: first.customer_email,
+      customer_phone: first.customer_phone,
+      customer_address: first.customer_address,
       channel: first.channel,
       status: first.status,
       total: rows.reduce((s, r) => s + (r.sold_price || 0), 0),
@@ -365,6 +371,32 @@ export default function OrdersPage() {
                         </div>
                       </div>
                     )}
+
+                    {/* Customer contact info */}
+                    <div className="rounded-lg border border-stone-200 bg-white px-4 py-3 space-y-1.5 text-sm">
+                      <p className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-2">Customer</p>
+                      <div className="flex gap-3">
+                        <span className="w-16 flex-shrink-0 text-xs text-stone-400 pt-0.5">Name</span>
+                        <span className="text-stone-800 font-medium">{group.customer_name || '—'}</span>
+                      </div>
+                      <div className="flex gap-3">
+                        <span className="w-16 flex-shrink-0 text-xs text-stone-400 pt-0.5">Email</span>
+                        <span className="text-stone-700">{group.customer_email || '—'}</span>
+                      </div>
+                      <div className="flex gap-3">
+                        <span className="w-16 flex-shrink-0 text-xs text-stone-400 pt-0.5">Phone</span>
+                        <span className="text-stone-700">{group.customer_phone || <span className="italic text-stone-400">Not saved</span>}</span>
+                      </div>
+                      <div className="flex gap-3">
+                        <span className="w-16 flex-shrink-0 text-xs text-stone-400 pt-0.5">Ship to</span>
+                        <span className="text-stone-700">
+                          {group.customer_address ||
+                            (group.notes && group.notes.startsWith('Ship to:')
+                              ? group.notes.split('\n')[0].replace('Ship to: ', '')
+                              : <span className="italic text-stone-400">No address on file</span>)}
+                        </span>
+                      </div>
+                    </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-2xl">
                       {/* Order details */}

@@ -7,10 +7,15 @@ const SERVER_BASE = 'https://server.stream-lineai.com/miracle-coins'
 
 export function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null
-  // Any URL containing /uploads/ → always serve from production server
-  if (url.includes('/uploads/')) {
-    const path = url.split('/uploads/').pop()
-    return `${SERVER_BASE}/uploads/${path}`
+  const uploadsMatch = url.match(/(?:^|\/)uploads\/(.+)/)
+  if (uploadsMatch) {
+    const filename = uploadsMatch[1]
+    // Locally-uploaded files are stored with a localhost URL — serve from local backend
+    if (url.includes('localhost') || url.includes('127.0.0.1')) {
+      return `${MEDIA_BASE}/uploads/${filename}`
+    }
+    // Everything else (server URLs, relative paths) → production server
+    return `${SERVER_BASE}/uploads/${filename}`
   }
   if (url.startsWith('http')) return url
   return `${MEDIA_BASE}${url.startsWith('/') ? '' : '/'}${url}`

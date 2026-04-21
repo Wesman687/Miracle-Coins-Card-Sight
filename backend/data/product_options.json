@@ -9,17 +9,20 @@
           "qty": 5,
           "price": 13
         }
-      ]
+      ],
+      "offerPrice": 11
     },
     {
       "value": "platinum",
       "label": "Platinum",
-      "basePrice": 8
+      "basePrice": 8,
+      "offerPrice": 6
     },
     {
       "value": "silver",
       "label": "Silver",
-      "basePrice": 4
+      "basePrice": 4,
+      "offerPrice": 3
     }
   ],
   "types": [
@@ -61,5 +64,7 @@
       "minTotal": 5000,
       "pct": 30
     }
-  ]
+  ],
+  "test_mode": true,
+  "inquiry_mode": true
 }

@@ -18,13 +18,22 @@ export default function CartDrawer({ open, onClose }: Props) {
   const [inquiryMode, setInquiryMode]   = useState(false)
   const [admin, setAdmin]               = useState(false)
   const [authUser, setAuthUser]         = useState<ReturnType<typeof getAuth>>(null)
-  const [profilePhone, setProfilePhone] = useState<string | null>(null)  // from account
+  const [profilePhone, setProfilePhone] = useState<string | null>(null)
+  const [profileAddr, setProfileAddr]   = useState<{
+    address_line1: string | null
+    city: string | null
+    state_province: string | null
+    zip_code: string | null
+  } | null>(null)
   const loadedRef = useRef(false)
 
   // Inquiry form state
   const [inquiryPhone, setInquiryPhone] = useState('')
+  const [inquiryAddr1, setInquiryAddr1] = useState('')
+  const [inquiryCity,  setInquiryCity]  = useState('')
+  const [inquiryState, setInquiryState] = useState('')
+  const [inquiryZip,   setInquiryZip]   = useState('')
   const [inquiryNote,  setInquiryNote]  = useState('')
-  const [inquirySent,  setInquirySent]  = useState(false)
   const [inquiryError, setInquiryError] = useState('')
   const [submitting,   setSubmitting]   = useState(false)
 
@@ -39,16 +48,30 @@ export default function CartDrawer({ open, onClose }: Props) {
     const a = getAuth()
     setAdmin(checkAdmin())
     setAuthUser(a)
-    // Fetch customer profile to get saved phone
+    // Fetch customer profile to pre-fill contact info
     if (a?.customerId) {
       fetch(`${API}/auth/customer/profile/${a.customerId}`, {
         headers: { Authorization: `Bearer ${a.token}` },
       })
         .then(r => r.ok ? r.json() : null)
         .then(data => {
-          if (data?.phone) {
+          if (!data) return
+          if (data.phone) {
             setProfilePhone(data.phone)
             setInquiryPhone(data.phone)
+          }
+          const hasAddr = data.address_line1 || data.city
+          if (hasAddr) {
+            setProfileAddr({
+              address_line1: data.address_line1 || null,
+              city: data.city || null,
+              state_province: data.state_province || null,
+              zip_code: data.zip_code || null,
+            })
+            setInquiryAddr1(data.address_line1 || '')
+            setInquiryCity(data.city || '')
+            setInquiryState(data.state_province || '')
+            setInquiryZip(data.zip_code || '')
           }
         })
         .catch(() => {})
@@ -83,6 +106,14 @@ export default function CartDrawer({ open, onClose }: Props) {
       setInquiryError('Could not read your account info. Please sign in again.')
       return
     }
+    const phone = inquiryPhone.trim()
+    const addr1 = inquiryAddr1.trim()
+    const city  = inquiryCity.trim()
+    const state = inquiryState.trim()
+    const zip   = inquiryZip.trim()
+    if (!phone) { setInquiryError('Please enter your phone number.'); return }
+    if (!addr1 || !city || !state || !zip) { setInquiryError('Please fill in your shipping address.'); return }
+
     setSubmitting(true)
     setInquiryError('')
     try {
@@ -93,7 +124,8 @@ export default function CartDrawer({ open, onClose }: Props) {
           items: items.map(i => ({ product_id: i.productId, qty: i.qty })),
           name: authUser.name,
           email: authUser.email,
-          phone: inquiryPhone.trim() || null,
+          phone,
+          address: `${addr1}, ${city}, ${state} ${zip}`,
           note: inquiryNote.trim() || null,
         }),
       })
@@ -102,17 +134,20 @@ export default function CartDrawer({ open, onClose }: Props) {
         setInquiryError(err.detail || 'Something went wrong. Please try again.')
         return
       }
-      setInquirySent(true)
       clearCart()
-      // Save phone to account if it was newly entered
-      const phone = inquiryPhone.trim()
-      if (phone && !profilePhone && authUser?.customerId) {
+      // Save any newly-entered contact info to account
+      const newPhone = !profilePhone && phone ? phone : undefined
+      const newAddr  = !profileAddr && addr1 ? { address_line1: addr1, city, state_province: state, zip_code: zip } : undefined
+      if ((newPhone || newAddr) && authUser?.customerId) {
         fetch(`${API}/auth/customer/profile/${authUser.customerId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', ...authHeaders() },
-          body: JSON.stringify({ phone }),
+          body: JSON.stringify({ phone: newPhone, ...newAddr }),
         }).catch(() => {})
       }
+      // Close the cart and send to account orders page
+      onClose()
+      window.location.href = '/account'
     } catch {
       setInquiryError('Could not send request. Please try again.')
     } finally {
@@ -237,23 +272,10 @@ export default function CartDrawer({ open, onClose }: Props) {
         </div>
 
         {/* Footer */}
-        {(items.length > 0 || inquirySent) && (
+        {items.length > 0 && (
           <div className="border-t border-stone-200 bg-white px-6 py-5 space-y-4">
 
-            {inquirySent ? (
-              <div className="flex flex-col items-center gap-3 py-4 text-center">
-                <div className="rounded-full bg-green-100 p-3">
-                  <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                <p className="text-base font-semibold text-stone-900">Request sent!</p>
-                <p className="text-sm text-stone-500">We&apos;ll reach out shortly to arrange your order.</p>
-                <button onClick={onClose} className="mt-1 rounded-full bg-amber-500 px-6 py-2.5 text-sm font-bold text-white hover:bg-amber-600 transition-colors">
-                  Close
-                </button>
-              </div>
-            ) : inquiryMode && !admin ? (
+            {inquiryMode && !admin ? (
               <>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-stone-500">Subtotal ({count} item{count !== 1 ? 's' : ''})</span>
@@ -288,7 +310,7 @@ export default function CartDrawer({ open, onClose }: Props) {
                     <div className="space-y-2">
                       <div>
                         <label className="mb-1 block text-xs font-medium text-stone-500">
-                          Phone {!profilePhone && <span className="text-red-400">*</span>}
+                          Phone <span className="text-red-400">*</span>
                         </label>
                         <input
                           type="tel" value={inquiryPhone}
@@ -298,6 +320,50 @@ export default function CartDrawer({ open, onClose }: Props) {
                           className={`w-full rounded-xl border px-3 py-2.5 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400 ${profilePhone ? 'border-stone-100 bg-stone-50 text-stone-500' : 'border-stone-200'}`}
                         />
                       </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-stone-500">
+                          Street Address <span className="text-red-400">*</span>
+                        </label>
+                        <input
+                          type="text" value={inquiryAddr1}
+                          onChange={e => setInquiryAddr1(e.target.value)}
+                          placeholder="123 Main St"
+                          readOnly={!!profileAddr}
+                          className={`w-full rounded-xl border px-3 py-2.5 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400 ${profileAddr ? 'border-stone-100 bg-stone-50 text-stone-500' : 'border-stone-200'}`}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text" value={inquiryCity}
+                          onChange={e => setInquiryCity(e.target.value)}
+                          placeholder="City"
+                          readOnly={!!profileAddr}
+                          className={`w-full rounded-xl border px-3 py-2.5 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400 ${profileAddr ? 'border-stone-100 bg-stone-50 text-stone-500' : 'border-stone-200'}`}
+                        />
+                        <input
+                          type="text" value={inquiryState}
+                          onChange={e => setInquiryState(e.target.value)}
+                          placeholder="State"
+                          readOnly={!!profileAddr}
+                          className={`w-full rounded-xl border px-3 py-2.5 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400 ${profileAddr ? 'border-stone-100 bg-stone-50 text-stone-500' : 'border-stone-200'}`}
+                        />
+                      </div>
+                      <input
+                        type="text" value={inquiryZip}
+                        onChange={e => setInquiryZip(e.target.value)}
+                        placeholder="ZIP Code"
+                        readOnly={!!profileAddr}
+                        className={`w-full rounded-xl border px-3 py-2.5 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400 ${profileAddr ? 'border-stone-100 bg-stone-50 text-stone-500' : 'border-stone-200'}`}
+                      />
+                      {profileAddr && (
+                        <button
+                          type="button"
+                          onClick={() => { setProfileAddr(null); setInquiryAddr1(''); setInquiryCity(''); setInquiryState(''); setInquiryZip('') }}
+                          className="text-xs text-amber-600 hover:underline text-left"
+                        >
+                          Use a different address
+                        </button>
+                      )}
                       <textarea
                         placeholder="Any notes? (optional)" value={inquiryNote}
                         onChange={e => setInquiryNote(e.target.value)} rows={2}
