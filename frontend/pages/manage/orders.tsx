@@ -176,7 +176,7 @@ export default function OrdersPage() {
     if (!confirm(`Delete ${selected.size} order${selected.size !== 1 ? 's' : ''}? This cannot be undone.`)) return
     setBulkDeleting(true)
     try {
-      await Promise.all([...selected].map(key =>
+      await Promise.all(Array.from(selected).map(key =>
         fetch(`${API}/storefront/admin/orders/group/${encodeURIComponent(key)}`, {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${getToken()}` },
