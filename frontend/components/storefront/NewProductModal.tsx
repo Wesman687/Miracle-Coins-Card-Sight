@@ -7,7 +7,7 @@ import { getAuth } from '../../lib/auth'
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1270/api/v1'
 function getToken() { return getAuth()?.token || 'manage-token' }
 
-interface MetalOption { value: string; label: string; basePrice?: number }
+interface MetalOption { value: string; label: string; basePrice?: number; offerPrice?: number }
 
 interface Props {
   onClose: () => void
@@ -40,17 +40,13 @@ const WEIGHT_DEFAULTS: Record<string, string> = {
 }
 
 export default function NewProductModal({ onClose, onSaved }: Props) {
-  // Options from server (metal base prices, default offer price)
+  // Options from server (metal base prices + offer prices)
   const [metals, setMetals] = useState<MetalOption[]>(DEFAULT_METALS)
-  const [defaultOfferPrice, setDefaultOfferPrice] = useState<number | null>(null)
 
   useEffect(() => {
     fetch(`${API}/storefront/options`)
       .then(r => r.json())
-      .then(data => {
-        if (data.metals?.length) setMetals(data.metals)
-        if (data.defaultOfferPrice != null) setDefaultOfferPrice(data.defaultOfferPrice)
-      })
+      .then(data => { if (data.metals?.length) setMetals(data.metals) })
       .catch(() => {})
   }, [])
 
@@ -66,9 +62,10 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
   const [unlimited, setUnlimited] = useState(false)
   const [ebayQuantity, setEbayQuantity] = useState('1')
 
-  // Derived: the primary metal's base price from options
+  // Derived from the primary metal's settings
   const primaryMetal = metals.find(m => m.value === selectedMetals[0])
   const standardPrice = primaryMetal?.basePrice ?? null
+  const standardOfferPrice = primaryMetal?.offerPrice ?? null
 
   // Image state
   const [imageStage, setImageStage] = useState<ImageStage>('empty')
@@ -175,9 +172,9 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
         ? (standardPrice ?? null)
         : (customPrice ? parseFloat(customPrice) : null)
 
-      // Resolve offer price: standard (global default) or custom
+      // Resolve offer price: standard (metal offer price) or custom
       const effectiveOfferPrice = useStandardOffer
-        ? (defaultOfferPrice ?? undefined)
+        ? (standardOfferPrice ?? undefined)
         : (customOfferPrice ? parseFloat(customOfferPrice) : undefined)
 
       // Create product
@@ -508,8 +505,8 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
                   </div>
                   <div>
                     <div className="mb-1.5 flex items-center justify-between">
-                      <label className="text-xs font-medium text-stone-600">Best Offer Auto-Accept ($)</label>
-                      {defaultOfferPrice != null && (
+                      <label className="text-xs font-medium text-stone-600">Min. Offer Price</label>
+                      {standardOfferPrice != null && (
                         <label className="flex items-center gap-1.5 text-xs text-stone-500 cursor-pointer">
                           <input
                             type="checkbox"
@@ -521,9 +518,9 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
                         </label>
                       )}
                     </div>
-                    {useStandardOffer && defaultOfferPrice != null ? (
+                    {useStandardOffer && standardOfferPrice != null ? (
                       <div className="flex items-center rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-500 w-40">
-                        ${defaultOfferPrice.toFixed(2)}
+                        ${standardOfferPrice.toFixed(2)}
                         <span className="ml-1.5 text-xs text-stone-400">(standard)</span>
                       </div>
                     ) : (
@@ -531,11 +528,11 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
                         type="number" min="0" step="0.01"
                         value={customOfferPrice}
                         onChange={e => setCustomOfferPrice(e.target.value)}
-                        placeholder={defaultOfferPrice == null ? 'e.g. 12.00 (optional)' : 'Custom'}
+                        placeholder={standardOfferPrice == null ? 'e.g. 12.00 (optional)' : 'Custom'}
                         className="w-40 rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:border-amber-400 focus:outline-none"
                       />
                     )}
-                    <p className="mt-1 text-xs text-stone-400">eBay auto-accepts offers at or above this price</p>
+                    <p className="mt-1 text-xs text-stone-400">Minimum offer eBay will show buyers</p>
                   </div>
                 </div>
               )}

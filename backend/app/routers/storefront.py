@@ -73,16 +73,15 @@ OPTIONS_FILE = Path(os.getenv('PRODUCT_OPTIONS_FILE', 'data/product_options.json
 
 DEFAULT_OPTIONS = {
     'metals': [
-        {'value': 'gold', 'label': 'Gold', 'basePrice': None},
-        {'value': 'platinum', 'label': 'Platinum', 'basePrice': None},
-        {'value': 'silver', 'label': 'Silver', 'basePrice': None},
+        {'value': 'gold', 'label': 'Gold', 'basePrice': None, 'offerPrice': None},
+        {'value': 'platinum', 'label': 'Platinum', 'basePrice': None, 'offerPrice': None},
+        {'value': 'silver', 'label': 'Silver', 'basePrice': None, 'offerPrice': None},
     ],
     'types': [
         {'value': 'card', 'label': 'Card'},
         {'value': 'bundle', 'label': 'Kit / Set'},
     ],
     'discounts': [],   # [{minTotal: float, pct: float}]
-    'defaultOfferPrice': None,  # eBay best-offer auto-accept price applied to all products
 }
 
 
@@ -604,7 +603,7 @@ def publish_coin_to_ebay(coin_row: Any, image_urls: List[str], overrides: Option
     if payload.get('offer_price'):
         offer_base['bestOfferTerms'] = {
             'bestOfferEnabled': True,
-            'autoAcceptPrice': {'value': str(round(float(payload['offer_price']), 2)), 'currency': 'USD'},
+            'autoDeclinePrice': {'value': str(round(float(payload['offer_price']), 2)), 'currency': 'USD'},
         }
     if policy_ids.get('merchantLocationKey'):
         offer_base['merchantLocationKey'] = policy_ids['merchantLocationKey']
@@ -1501,7 +1500,6 @@ class ProductOptionsRequest(BaseModel):
     metals: Optional[List[Dict[str, Any]]] = None
     types: Optional[List[Dict[str, Any]]] = None
     discounts: Optional[List[Dict[str, Any]]] = None
-    defaultOfferPrice: Optional[float] = None
 
 
 @router.put('/storefront/options')
@@ -1516,8 +1514,6 @@ async def update_product_options(
         opts['types'] = req.types
     if req.discounts is not None:
         opts['discounts'] = req.discounts
-    if 'defaultOfferPrice' in req.model_fields_set:
-        opts['defaultOfferPrice'] = req.defaultOfferPrice if req.defaultOfferPrice else None
     save_product_options(opts)
     return opts
 

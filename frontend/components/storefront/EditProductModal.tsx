@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import PhotoEditor from './PhotoEditor'
 import CameraCapture from './CameraCapture'
 
@@ -28,7 +28,7 @@ interface Props {
   onSaved: () => void
 }
 
-interface MetalOption { value: string; label: string; basePrice?: number }
+interface MetalOption { value: string; label: string; basePrice?: number; offerPrice?: number }
 interface TypeOption { value: string; label: string }
 
 type ImageStage = 'current' | 'camera' | 'uploading' | 'editing' | 'done'
@@ -65,19 +65,9 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
   // Standard pricing / offer toggles
   const [useStandardPrice, setUseStandardPrice] = useState(!product.price || product.price === 'Price coming soon')
   const [useStandardOffer, setUseStandardOffer] = useState(!product.offerPrice)
-  const [defaultOfferPrice, setDefaultOfferPrice] = useState<number | null>(null)
 
-  // Start with defaults immediately so buttons always show
   const [metals, setMetals] = useState<MetalOption[]>(DEFAULT_METALS)
   const [types, setTypes] = useState<TypeOption[]>(DEFAULT_TYPES)
-
-  const [optionsOpen, setOptionsOpen] = useState(false)
-  // Edit buffers for existing options
-  const [metalEdits, setMetalEdits] = useState<Record<string, { label: string; basePrice: string }>>({})
-  const [newMetalLabel, setNewMetalLabel] = useState('')
-  const [newMetalPrice, setNewMetalPrice] = useState('')
-  const [newTypeLabel, setNewTypeLabel] = useState('')
-  const [savingOptions, setSavingOptions] = useState(false)
 
   const [imageStage, setImageStage] = useState<ImageStage>('current')
   const [rawSrc, setRawSrc] = useState<string | null>(null)
@@ -103,16 +93,15 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
     }
   }
 
-  // Load options from API (updates defaults if server has more)
+  // Load options from API
   useEffect(() => {
     fetch(`${API}/storefront/options`)
       .then(r => r.json())
       .then(data => {
         if (data.metals?.length) setMetals(data.metals)
         if (data.types?.length) setTypes(data.types)
-        if (data.defaultOfferPrice != null) setDefaultOfferPrice(data.defaultOfferPrice)
       })
-      .catch(() => {}) // defaults already set
+      .catch(() => {})
   }, [])
 
   // Toggle metal in/out of selection (multi-select)
@@ -120,89 +109,11 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
     setSelectedMetals(prev => {
       if (prev.includes(value)) {
         const next = prev.filter(x => x !== value)
-        return next.length > 0 ? next : prev // keep at least one
+        return next.length > 0 ? next : prev
       }
-      const next = [value, ...prev.filter(x => x !== value)] // clicked = primary
-      const opt = metals.find(m => m.value === value)
-      if (opt?.basePrice && !price) setPrice(String(opt.basePrice))
+      const next = [value, ...prev.filter(x => x !== value)]
       return next
     })
-  }
-
-  // Sync edit buffers when metals load
-  useEffect(() => {
-    const edits: Record<string, { label: string; basePrice: string }> = {}
-    metals.forEach(m => {
-      edits[m.value] = {
-        label: m.label,
-        basePrice: m.basePrice != null ? String(m.basePrice) : '',
-      }
-    })
-    setMetalEdits(edits)
-  }, [metals])
-
-  async function persistOptions(nextMetals: MetalOption[], nextTypes: TypeOption[]) {
-    setSavingOptions(true)
-    try {
-      await fetch(`${API}/storefront/options`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-        body: JSON.stringify({ metals: nextMetals, types: nextTypes }),
-      })
-    } catch {}
-    setSavingOptions(false)
-  }
-
-  function saveMetalEdits() {
-    const next = metals.map(m => {
-      const edit = metalEdits[m.value]
-      if (!edit) return m
-      return {
-        ...m,
-        label: edit.label || m.label,
-        basePrice: edit.basePrice ? parseFloat(edit.basePrice) : undefined,
-      }
-    })
-    setMetals(next)
-    persistOptions(next, types)
-  }
-
-  function addMetal() {
-    const label = newMetalLabel.trim()
-    if (!label) return
-    const value = label.toLowerCase().replace(/\s+/g, '-')
-    if (metals.some(m => m.value === value)) return
-    const basePrice = newMetalPrice ? parseFloat(newMetalPrice) : undefined
-    const next = [...metals, { value, label, basePrice }]
-    setMetals(next)
-    persistOptions(next, types)
-    setNewMetalLabel('')
-    setNewMetalPrice('')
-  }
-
-  function removeMetal(value: string) {
-    const next = metals.filter(m => m.value !== value)
-    setMetals(next)
-    persistOptions(next, types)
-    if (selectedMetals.includes(value) && next.length) setSelectedMetals(prev => prev.filter(m => m !== value).concat(next[0].value))
-  }
-
-  function addType() {
-    const label = newTypeLabel.trim()
-    if (!label) return
-    const value = label.toLowerCase().replace(/\s+/g, '-')
-    if (types.some(t => t.value === value)) return
-    const next = [...types, { value, label }]
-    setTypes(next)
-    persistOptions(metals, next)
-    setNewTypeLabel('')
-  }
-
-  function removeType(value: string) {
-    const next = types.filter(t => t.value !== value)
-    setTypes(next)
-    persistOptions(metals, next)
-    if (productType === value && next.length) setProductType(next[0].value)
   }
 
   function handleFileSelect(file: File) {
@@ -249,8 +160,9 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
       const effectivePrice = useStandardPrice
         ? (primaryMetal?.basePrice ?? null)
         : (price ? parseFloat(price) : null)
+      const metalOfferPrice = primaryMetal?.offerPrice ?? null
       const effectiveOfferPrice = useStandardOffer
-        ? (defaultOfferPrice ?? 0)
+        ? (metalOfferPrice ?? 0)
         : (offerPrice ? parseFloat(offerPrice) : 0)
       const res = await fetch(`${API}/storefront/products/${product.id}`, {
         method: 'PUT',
@@ -287,8 +199,9 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
       const effectivePrice = useStandardPrice
         ? (primaryMetal?.basePrice ?? undefined)
         : (price ? parseFloat(price) : undefined)
+      const metalOfferPrice = primaryMetal?.offerPrice ?? undefined
       const effectiveOfferPrice = useStandardOffer
-        ? (defaultOfferPrice ?? undefined)
+        ? metalOfferPrice
         : (offerPrice ? parseFloat(offerPrice) : undefined)
       const res = await fetch(`${API}/storefront/products/${product.id}/ebay-publish`, {
         method: 'POST',
@@ -598,169 +511,43 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
             />
             <span className="text-xs text-stone-400">Separate from website stock</span>
           </div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <label className="text-xs font-medium text-stone-500 w-24 flex-shrink-0">Accept offers ≥</label>
-            {useStandardOffer && defaultOfferPrice != null ? (
-              <div className="flex items-center rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm text-stone-500 min-w-[6rem]">
-                ${defaultOfferPrice.toFixed(2)}
+          {(() => {
+            const primaryMetal = metals.find(m => m.value === selectedMetals[0])
+            const metalOfferPrice = primaryMetal?.offerPrice ?? null
+            return (
+              <div className="flex items-center gap-3 flex-wrap">
+                <label className="text-xs font-medium text-stone-500 w-24 flex-shrink-0">Min. offer</label>
+                {useStandardOffer && metalOfferPrice != null ? (
+                  <div className="flex items-center rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm text-stone-500 min-w-[6rem]">
+                    ${metalOfferPrice.toFixed(2)}
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-stone-400">$</span>
+                    <input
+                      type="number" min="0" step="0.01"
+                      value={offerPrice}
+                      onChange={e => setOfferPrice(e.target.value)}
+                      placeholder="—"
+                      className="w-24 rounded-lg border border-stone-200 pl-6 pr-2 py-1.5 text-sm text-stone-800 placeholder-stone-300 focus:border-amber-400 focus:outline-none"
+                    />
+                  </div>
+                )}
+                {metalOfferPrice != null && (
+                  <label className="flex items-center gap-1.5 text-xs text-stone-500 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useStandardOffer}
+                      onChange={e => setUseStandardOffer(e.target.checked)}
+                      className="accent-amber-500"
+                    />
+                    Standard
+                  </label>
+                )}
+                <span className="text-xs text-stone-400">Minimum offer eBay will show buyers</span>
               </div>
-            ) : (
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-stone-400">$</span>
-                <input
-                  type="number" min="0" step="0.01"
-                  value={offerPrice}
-                  onChange={e => setOfferPrice(e.target.value)}
-                  placeholder="—"
-                  className="w-24 rounded-lg border border-stone-200 pl-6 pr-2 py-1.5 text-sm text-stone-800 placeholder-stone-300 focus:border-amber-400 focus:outline-none"
-                />
-              </div>
-            )}
-            {defaultOfferPrice != null && (
-              <label className="flex items-center gap-1.5 text-xs text-stone-500 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={useStandardOffer}
-                  onChange={e => setUseStandardOffer(e.target.checked)}
-                  className="accent-amber-500"
-                />
-                Standard
-              </label>
-            )}
-            <span className="text-xs text-stone-400">Auto-accept best offer at this price</span>
-          </div>
-        </div>
-
-        {/* Manage Options panel */}
-        <div className="border-t border-stone-100 px-6 pb-6">
-          <button
-            type="button"
-            onClick={() => setOptionsOpen(o => !o)}
-            className="flex w-full items-center justify-between py-4 text-sm font-medium text-stone-500 hover:text-stone-700 transition-colors"
-          >
-            <span>Manage Metals & Types</span>
-            <svg className={`h-4 w-4 transition-transform ${optionsOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-
-          {optionsOpen && (
-            <div className="grid gap-6 sm:grid-cols-2">
-
-              {/* Metals */}
-              <div>
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-stone-400">Metals & Base Prices</p>
-                <div className="space-y-2 mb-3">
-                  {metals.map(m => (
-                    <div key={m.value} className="flex items-center gap-2 rounded-xl border border-stone-100 bg-stone-50 p-2">
-                      <div className="flex-1 min-w-0">
-                        <input
-                          type="text"
-                          value={metalEdits[m.value]?.label ?? m.label}
-                          onChange={e => setMetalEdits(prev => ({ ...prev, [m.value]: { ...prev[m.value], label: e.target.value } }))}
-                          className="w-full rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-sm focus:border-amber-400 focus:outline-none"
-                          placeholder="Label"
-                        />
-                      </div>
-                      <div className="w-20 flex-shrink-0">
-                        <input
-                          type="number" min="0" step="0.01"
-                          value={metalEdits[m.value]?.basePrice ?? ''}
-                          onChange={e => setMetalEdits(prev => ({ ...prev, [m.value]: { ...prev[m.value], basePrice: e.target.value } }))}
-                          className="w-full rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-sm focus:border-amber-400 focus:outline-none"
-                          placeholder="$"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeMetal(m.value)}
-                        className="flex-shrink-0 text-stone-300 hover:text-red-400 transition-colors"
-                        title="Remove"
-                      >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={saveMetalEdits}
-                  disabled={savingOptions}
-                  className="mb-3 w-full rounded-lg border border-amber-300 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50 transition-colors"
-                >
-                  {savingOptions ? 'Saving…' : 'Save edits'}
-                </button>
-                <p className="mb-2 text-xs text-stone-400">Add new metal:</p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newMetalLabel}
-                    onChange={e => setNewMetalLabel(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && addMetal()}
-                    placeholder="Name (e.g. Copper)"
-                    className="flex-1 rounded-lg border border-stone-200 px-3 py-1.5 text-sm focus:border-amber-400 focus:outline-none"
-                  />
-                  <input
-                    type="number" min="0" step="0.01"
-                    value={newMetalPrice}
-                    onChange={e => setNewMetalPrice(e.target.value)}
-                    placeholder="$"
-                    className="w-16 rounded-lg border border-stone-200 px-2.5 py-1.5 text-sm focus:border-amber-400 focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={addMetal}
-                    className="rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-600 transition-colors"
-                  >
-                    Add
-                  </button>
-                </div>
-              </div>
-
-              {/* Types */}
-              <div>
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-stone-400">Product Types</p>
-                <div className="space-y-2 mb-3">
-                  {types.map(t => (
-                    <div key={t.value} className="flex items-center gap-2 rounded-xl border border-stone-100 bg-stone-50 px-3 py-2">
-                      <span className="flex-1 text-sm text-stone-700">{t.label}</span>
-                      <button
-                        type="button"
-                        onClick={() => removeType(t.value)}
-                        className="text-stone-300 hover:text-red-400 transition-colors"
-                        title="Remove"
-                      >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <p className="mb-2 text-xs text-stone-400">Add new type:</p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newTypeLabel}
-                    onChange={e => setNewTypeLabel(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && addType()}
-                    placeholder="Name (e.g. Coin)"
-                    className="flex-1 rounded-lg border border-stone-200 px-3 py-1.5 text-sm focus:border-amber-400 focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={addType}
-                    className="rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-600 transition-colors"
-                  >
-                    Add
-                  </button>
-                </div>
-              </div>
-
-            </div>
-          )}
+            )
+          })()}
         </div>
 
       </div>

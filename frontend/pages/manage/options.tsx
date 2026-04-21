@@ -6,10 +6,9 @@ import { getAuth } from '../../lib/auth'
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1270/api/v1'
 function getToken() { return getAuth()?.token || 'manage-token' }
 
-interface MetalOption  { value: string; label: string; basePrice?: number }
+interface MetalOption  { value: string; label: string; basePrice?: number; offerPrice?: number }
 interface TypeOption   { value: string; label: string }
 interface DiscountTier { minTotal: number; pct: number }
-interface CatalogOptions { metals: MetalOption[]; types: TypeOption[]; discounts: DiscountTier[]; defaultOfferPrice?: number | null }
 
 const DEFAULT_METALS: MetalOption[] = [
   { value: 'gold',     label: 'Gold' },
@@ -25,19 +24,16 @@ export default function CatalogOptionsPage() {
   const [metals,    setMetals]    = useState<MetalOption[]>(DEFAULT_METALS)
   const [types,     setTypes]     = useState<TypeOption[]>(DEFAULT_TYPES)
   const [discounts, setDiscounts] = useState<DiscountTier[]>([])
-  const [defaultOfferPrice, setDefaultOfferPrice] = useState('')
   const [saving,    setSaving]    = useState(false)
   const [saved,     setSaved]     = useState(false)
 
-  const [metalEdits,    setMetalEdits]    = useState<Record<string, { label: string; basePrice: string }>>({})
+  const [metalEdits,    setMetalEdits]    = useState<Record<string, { label: string; basePrice: string; offerPrice: string }>>({})
   const [newMetalLabel, setNewMetalLabel] = useState('')
   const [newMetalPrice, setNewMetalPrice] = useState('')
+  const [newMetalOffer, setNewMetalOffer] = useState('')
   const [newTypeLabel,  setNewTypeLabel]  = useState('')
 
-  // Discount edit state (controlled inputs, parallel to discounts)
   const [discountEdits, setDiscountEdits] = useState<{ minTotal: string; pct: string }[]>([])
-
-  // New discount form
   const [newMin, setNewMin] = useState('')
   const [newPct, setNewPct] = useState('')
 
@@ -48,23 +44,22 @@ export default function CatalogOptionsPage() {
         if (data.metals?.length)    setMetals(data.metals)
         if (data.types?.length)     setTypes(data.types)
         if (data.discounts?.length) setDiscounts(data.discounts)
-        if (data.defaultOfferPrice != null) setDefaultOfferPrice(String(data.defaultOfferPrice))
       })
       .catch(() => {})
   }, [])
 
   useEffect(() => {
-    const edits: Record<string, { label: string; basePrice: string }> = {}
+    const edits: Record<string, { label: string; basePrice: string; offerPrice: string }> = {}
     metals.forEach(m => {
       edits[m.value] = {
-        label:     metalEdits[m.value]?.label     || m.label,
-        basePrice: metalEdits[m.value]?.basePrice || (m.basePrice != null ? String(m.basePrice) : ''),
+        label:      metalEdits[m.value]?.label      || m.label,
+        basePrice:  metalEdits[m.value]?.basePrice  || (m.basePrice  != null ? String(m.basePrice)  : ''),
+        offerPrice: metalEdits[m.value]?.offerPrice || (m.offerPrice != null ? String(m.offerPrice) : ''),
       }
     })
     setMetalEdits(edits)
   }, [metals])
 
-  // Keep discountEdits in sync when discounts array changes (add/remove)
   useEffect(() => {
     setDiscountEdits(discounts.map((d, i) => ({
       minTotal: discountEdits[i]?.minTotal || String(d.minTotal),
@@ -73,19 +68,13 @@ export default function CatalogOptionsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discounts])
 
-  async function persist(nextMetals: MetalOption[], nextTypes: TypeOption[], nextDiscounts: DiscountTier[], offerPrice?: string) {
+  async function persist(nextMetals: MetalOption[], nextTypes: TypeOption[], nextDiscounts: DiscountTier[]) {
     setSaving(true); setSaved(false)
-    const op = offerPrice !== undefined ? offerPrice : defaultOfferPrice
     try {
       await fetch(`${API}/storefront/options`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-        body: JSON.stringify({
-          metals: nextMetals,
-          types: nextTypes,
-          discounts: nextDiscounts,
-          defaultOfferPrice: op ? parseFloat(op) : null,
-        }),
+        body: JSON.stringify({ metals: nextMetals, types: nextTypes, discounts: nextDiscounts }),
       })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
@@ -93,13 +82,12 @@ export default function CatalogOptionsPage() {
     setSaving(false)
   }
 
-  // ── Metals ────────────────────────────────────────────────────────────────
-
   function saveMetalEdits() {
     const next = metals.map(m => ({
       ...m,
-      label:     metalEdits[m.value]?.label     || m.label,
-      basePrice: metalEdits[m.value]?.basePrice ? parseFloat(metalEdits[m.value].basePrice) : m.basePrice,
+      label:      metalEdits[m.value]?.label      || m.label,
+      basePrice:  metalEdits[m.value]?.basePrice  ? parseFloat(metalEdits[m.value].basePrice)  : m.basePrice,
+      offerPrice: metalEdits[m.value]?.offerPrice ? parseFloat(metalEdits[m.value].offerPrice) : m.offerPrice,
     }))
     setMetals(next)
     persist(next, types, discounts)
@@ -109,17 +97,19 @@ export default function CatalogOptionsPage() {
     const label = newMetalLabel.trim(); if (!label) return
     const value = label.toLowerCase().replace(/\s+/g, '-')
     if (metals.some(m => m.value === value)) return
-    const next = [...metals, { value, label, basePrice: newMetalPrice ? parseFloat(newMetalPrice) : undefined }]
+    const next = [...metals, {
+      value, label,
+      basePrice:  newMetalPrice ? parseFloat(newMetalPrice) : undefined,
+      offerPrice: newMetalOffer ? parseFloat(newMetalOffer) : undefined,
+    }]
     setMetals(next); persist(next, types, discounts)
-    setNewMetalLabel(''); setNewMetalPrice('')
+    setNewMetalLabel(''); setNewMetalPrice(''); setNewMetalOffer('')
   }
 
   function removeMetal(value: string) {
     const next = metals.filter(m => m.value !== value)
     setMetals(next); persist(next, types, discounts)
   }
-
-  // ── Types ─────────────────────────────────────────────────────────────────
 
   function addType() {
     const label = newTypeLabel.trim(); if (!label) return
@@ -134,8 +124,6 @@ export default function CatalogOptionsPage() {
     const next = types.filter(t => t.value !== value)
     setTypes(next); persist(metals, next, discounts)
   }
-
-  // ── Discounts ─────────────────────────────────────────────────────────────
 
   function saveDiscountEdits() {
     const next = discountEdits
@@ -221,107 +209,72 @@ export default function CatalogOptionsPage() {
             </div>
           )}
 
-          {/* Add discount */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm text-stone-500">Spend</span>
             <div className="flex items-center rounded-xl border border-stone-200 bg-stone-50 overflow-hidden w-28">
               <span className="pl-3 text-sm text-stone-400">$</span>
-              <input
-                type="number" min="1" step="1"
-                value={newMin}
-                onChange={e => setNewMin(e.target.value)}
-                placeholder="50"
-                className="w-full px-2 py-2 text-sm bg-transparent focus:outline-none"
-              />
+              <input type="number" min="1" step="1" value={newMin} onChange={e => setNewMin(e.target.value)} placeholder="50"
+                className="w-full px-2 py-2 text-sm bg-transparent focus:outline-none" />
             </div>
             <span className="text-sm text-stone-500">or more →</span>
             <div className="flex items-center rounded-xl border border-stone-200 bg-stone-50 overflow-hidden w-24">
-              <input
-                type="number" min="1" max="99" step="0.5"
-                value={newPct}
-                onChange={e => setNewPct(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addDiscount()}
-                placeholder="10"
-                className="w-full px-2 py-2 text-sm bg-transparent focus:outline-none text-right"
-              />
+              <input type="number" min="1" max="99" step="0.5" value={newPct} onChange={e => setNewPct(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addDiscount()} placeholder="10"
+                className="w-full px-2 py-2 text-sm bg-transparent focus:outline-none text-right" />
               <span className="pr-2 text-sm text-stone-400">%</span>
             </div>
             <span className="text-sm text-stone-500">off</span>
-            <button
-              onClick={addDiscount}
-              className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 transition-colors"
-            >
-              Add
-            </button>
+            <button onClick={addDiscount} className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 transition-colors">Add</button>
           </div>
           <p className="mt-2 text-xs text-stone-400">e.g. Spend $100 or more → 10% off the entire order</p>
-        </section>
-
-        {/* ── eBay Default Offer Price ─────────────────────────────────────── */}
-        <section className="rounded-2xl border border-stone-200 bg-white p-6">
-          <h2 className="mb-1 text-base font-semibold text-stone-900">Default eBay Offer Price</h2>
-          <p className="mb-4 text-sm text-stone-400">
-            When listing on eBay, new products will auto-accept best offers at or above this price.
-            Leave blank to disable best offers by default.
-          </p>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center rounded-xl border border-stone-200 bg-stone-50 overflow-hidden w-36">
-              <span className="pl-3 text-sm text-stone-400">$</span>
-              <input
-                type="number" min="0" step="0.01"
-                value={defaultOfferPrice}
-                onChange={e => setDefaultOfferPrice(e.target.value)}
-                placeholder="e.g. 12.00"
-                className="w-full px-2 py-2.5 text-sm bg-transparent focus:outline-none"
-              />
-            </div>
-            <button
-              onClick={() => persist(metals, types, discounts, defaultOfferPrice)}
-              disabled={saving}
-              className="rounded-full bg-amber-500 px-5 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50 transition-colors"
-            >
-              {saving ? 'Saving…' : 'Save'}
-            </button>
-            {defaultOfferPrice && (
-              <button
-                onClick={() => { setDefaultOfferPrice(''); persist(metals, types, discounts, '') }}
-                className="text-sm text-stone-400 hover:text-red-400 transition-colors"
-              >
-                Clear
-              </button>
-            )}
-          </div>
         </section>
 
         {/* ── Metal Types ──────────────────────────────────────────────────── */}
         <section className="rounded-2xl border border-stone-200 bg-white p-6">
           <h2 className="mb-1 text-base font-semibold text-stone-900">Metal Types</h2>
-          <p className="mb-5 text-sm text-stone-400">Set a base price per metal — products default to this when the metal is selected in the editor.</p>
+          <p className="mb-1 text-sm text-stone-400">Set pricing defaults per metal. New products will use these automatically.</p>
+          <div className="mb-4 grid grid-cols-3 gap-2 text-xs font-medium text-stone-400 uppercase tracking-wider px-3">
+            <span>Metal</span>
+            <span>Price</span>
+            <span>Min. Offer</span>
+          </div>
 
-          <div className="space-y-3 mb-5">
+          <div className="space-y-2 mb-5">
             {metals.map(m => (
-              <div key={m.value} className="flex items-center gap-3 rounded-xl border border-stone-200 bg-stone-50 p-3">
+              <div key={m.value} className="grid grid-cols-3 gap-2 items-center rounded-xl border border-stone-200 bg-stone-50 p-3">
                 <input
                   type="text"
                   value={metalEdits[m.value]?.label ?? m.label}
                   onChange={e => setMetalEdits(prev => ({ ...prev, [m.value]: { ...prev[m.value], label: e.target.value } }))}
-                  className="flex-1 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                  className="rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
                 />
-                <div className="flex items-center rounded-lg border border-stone-200 bg-white overflow-hidden w-28">
+                <div className="flex items-center rounded-lg border border-stone-200 bg-white overflow-hidden">
                   <span className="pl-3 text-sm text-stone-400">$</span>
                   <input
                     type="number" min="0" step="0.01"
                     value={metalEdits[m.value]?.basePrice ?? ''}
                     onChange={e => setMetalEdits(prev => ({ ...prev, [m.value]: { ...prev[m.value], basePrice: e.target.value } }))}
-                    placeholder="Base price"
+                    placeholder="—"
                     className="w-full px-2 py-1.5 text-sm focus:outline-none"
                   />
                 </div>
-                <button onClick={() => removeMetal(m.value)} className="text-stone-300 hover:bg-red-50 hover:text-red-400 rounded-lg p-1.5 transition-colors">
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center rounded-lg border border-stone-200 bg-white overflow-hidden flex-1">
+                    <span className="pl-3 text-sm text-stone-400">$</span>
+                    <input
+                      type="number" min="0" step="0.01"
+                      value={metalEdits[m.value]?.offerPrice ?? ''}
+                      onChange={e => setMetalEdits(prev => ({ ...prev, [m.value]: { ...prev[m.value], offerPrice: e.target.value } }))}
+                      placeholder="—"
+                      className="w-full px-2 py-1.5 text-sm focus:outline-none"
+                    />
+                  </div>
+                  <button onClick={() => removeMetal(m.value)} className="text-stone-300 hover:text-red-400 rounded-lg p-1 transition-colors flex-shrink-0">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -332,12 +285,17 @@ export default function CatalogOptionsPage() {
 
           <div className="border-t border-stone-100 pt-5">
             <p className="mb-3 text-xs font-medium text-stone-500 uppercase tracking-wider">Add a new metal type</p>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <input type="text" value={newMetalLabel} onChange={e => setNewMetalLabel(e.target.value)} placeholder="Label (e.g. Rose Gold)"
-                className="flex-1 rounded-xl border border-stone-200 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400" />
+                className="flex-1 min-w-32 rounded-xl border border-stone-200 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400" />
               <div className="flex items-center rounded-xl border border-stone-200 bg-white overflow-hidden w-28">
                 <span className="pl-3 text-sm text-stone-400">$</span>
                 <input type="number" min="0" step="0.01" value={newMetalPrice} onChange={e => setNewMetalPrice(e.target.value)} placeholder="Price"
+                  className="w-full px-2 py-2 text-sm focus:outline-none" />
+              </div>
+              <div className="flex items-center rounded-xl border border-stone-200 bg-white overflow-hidden w-32">
+                <span className="pl-3 text-sm text-stone-400">$</span>
+                <input type="number" min="0" step="0.01" value={newMetalOffer} onChange={e => setNewMetalOffer(e.target.value)} placeholder="Min. offer"
                   className="w-full px-2 py-2 text-sm focus:outline-none" />
               </div>
               <button onClick={addMetal} className="rounded-xl bg-stone-800 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700 transition-colors">Add</button>
