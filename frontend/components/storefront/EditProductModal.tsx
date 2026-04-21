@@ -3,6 +3,7 @@ import PhotoEditor from './PhotoEditor'
 import CameraCapture from './CameraCapture'
 
 import { getAuth } from '../../lib/auth'
+import { resolveImageUrl } from '../../lib/storefront'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1270/api/v1'
 function getToken() { return getAuth()?.token || 'manage-token' }
@@ -226,7 +227,7 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
     }
   }
 
-  const currentImage = newImageUrl || product.image
+  const currentImage = resolveImageUrl(newImageUrl || product.image)
   const primaryMetal = selectedMetals[0]
   const selectedMetal = metals.find(m => m.value === primaryMetal)
 

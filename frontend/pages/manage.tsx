@@ -4,6 +4,7 @@ import NewProductModal from '../components/storefront/NewProductModal'
 import EditProductModal from '../components/storefront/EditProductModal'
 
 import { getAuth } from '../lib/auth'
+import { resolveImageUrl } from '../lib/storefront'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1270/api/v1'
 function getToken() { return getAuth()?.token || 'manage-token' }
@@ -261,48 +262,51 @@ export default function ManagePage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {products.map(product => (
-                <div key={product.id} className="flex items-center gap-4 rounded-xl border border-stone-200 bg-white p-4">
-                  {product.image ? (
-                    <img src={product.image} alt={product.name} className="h-14 w-14 rounded-lg object-cover border border-stone-100 flex-shrink-0" />
-                  ) : (
-                    <div className="h-14 w-14 rounded-lg bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-300 flex-shrink-0">
-                      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                  )}
-
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-stone-900 text-sm truncate">{product.name}</div>
-                    <div className="text-xs text-stone-400 mt-0.5 capitalize">
-                      {product.metal} · {product.productType === 'bundle' ? 'Kit' : 'Card'} · {product.price}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {product.buyUrl && (
-                      <a href={product.buyUrl} target="_blank" rel="noreferrer"
-                        className="hidden sm:inline-flex rounded-full border border-stone-200 px-3 py-1.5 text-xs text-stone-500 no-underline hover:border-amber-300 hover:text-amber-600 transition-colors">
-                        eBay ↗
-                      </a>
+              {products.map((product) => {
+                const image = resolveImageUrl(product.image)
+                return (
+                  <div key={product.id} className="flex items-center gap-4 rounded-xl border border-stone-200 bg-white p-4">
+                    {image ? (
+                      <img src={image} alt={product.name} className="h-14 w-14 rounded-lg object-cover border border-stone-100 flex-shrink-0" />
+                    ) : (
+                      <div className="h-14 w-14 rounded-lg bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-300 flex-shrink-0">
+                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </div>
                     )}
-                    <button
-                      onClick={() => setEditProduct(product)}
-                      className="rounded-full border border-stone-200 px-3 py-1.5 text-xs text-stone-600 hover:border-amber-300 hover:text-amber-600 transition-colors"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => deleteProduct(product)}
-                      disabled={deletingId === product.id}
-                      className="rounded-full border border-stone-200 px-3 py-1.5 text-xs text-stone-400 hover:border-red-300 hover:text-red-500 disabled:opacity-50 transition-colors"
-                    >
-                      {deletingId === product.id ? '…' : 'Delete'}
-                    </button>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-stone-900 text-sm truncate">{product.name}</div>
+                      <div className="text-xs text-stone-400 mt-0.5 capitalize">
+                        {product.metal} · {product.productType === 'bundle' ? 'Kit' : 'Card'} · {product.price}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {product.buyUrl && (
+                        <a href={product.buyUrl} target="_blank" rel="noreferrer"
+                          className="hidden sm:inline-flex rounded-full border border-stone-200 px-3 py-1.5 text-xs text-stone-500 no-underline hover:border-amber-300 hover:text-amber-600 transition-colors">
+                          eBay ↗
+                        </a>
+                      )}
+                      <button
+                        onClick={() => setEditProduct(product)}
+                        className="rounded-full border border-stone-200 px-3 py-1.5 text-xs text-stone-600 hover:border-amber-300 hover:text-amber-600 transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => deleteProduct(product)}
+                        disabled={deletingId === product.id}
+                        className="rounded-full border border-stone-200 px-3 py-1.5 text-xs text-stone-400 hover:border-red-300 hover:text-red-500 disabled:opacity-50 transition-colors"
+                      >
+                        {deletingId === product.id ? '…' : 'Delete'}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </section>
