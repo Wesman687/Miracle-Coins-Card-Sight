@@ -37,6 +37,8 @@ export default function CatalogOptionsPage() {
   const [newMin, setNewMin] = useState('')
   const [newPct, setNewPct] = useState('')
 
+  const [testMode, setTestMode] = useState(false)
+
   useEffect(() => {
     fetch(`${API}/storefront/options`)
       .then(r => r.json())
@@ -44,6 +46,7 @@ export default function CatalogOptionsPage() {
         if (data.metals?.length)    setMetals(data.metals)
         if (data.types?.length)     setTypes(data.types)
         if (data.discounts?.length) setDiscounts(data.discounts)
+        if (typeof data.test_mode === 'boolean') setTestMode(data.test_mode)
       })
       .catch(() => {})
   }, [])
@@ -68,18 +71,27 @@ export default function CatalogOptionsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discounts])
 
-  async function persist(nextMetals: MetalOption[], nextTypes: TypeOption[], nextDiscounts: DiscountTier[]) {
+  async function persist(nextMetals: MetalOption[], nextTypes: TypeOption[], nextDiscounts: DiscountTier[], nextTestMode?: boolean) {
     setSaving(true); setSaved(false)
     try {
       await fetch(`${API}/storefront/options`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-        body: JSON.stringify({ metals: nextMetals, types: nextTypes, discounts: nextDiscounts }),
+        body: JSON.stringify({
+          metals: nextMetals, types: nextTypes, discounts: nextDiscounts,
+          test_mode: nextTestMode ?? testMode,
+        }),
       })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch {}
     setSaving(false)
+  }
+
+  async function toggleTestMode() {
+    const next = !testMode
+    setTestMode(next)
+    await persist(metals, types, discounts, next)
   }
 
   function saveMetalEdits() {
@@ -301,6 +313,37 @@ export default function CatalogOptionsPage() {
               <button onClick={addMetal} className="rounded-xl bg-stone-800 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700 transition-colors">Add</button>
             </div>
           </div>
+        </section>
+
+        {/* ── Developer / Test Mode ───────────────────────────────────────── */}
+        <section className="rounded-2xl border border-stone-200 bg-white p-6">
+          <h2 className="mb-1 text-base font-semibold text-stone-900">Developer Settings</h2>
+          <p className="mb-5 text-sm text-stone-400">Use test Stripe keys to run through the checkout flow without charging real cards.</p>
+
+          <div className="flex items-center justify-between rounded-xl border border-stone-200 bg-stone-50 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-stone-800">Stripe Test Mode</p>
+              <p className="text-xs text-stone-400 mt-0.5">
+                {testMode
+                  ? 'Active — checkout uses STRIPE_TEST_SECRET_KEY. Use card 4242 4242 4242 4242.'
+                  : 'Inactive — checkout uses live Stripe keys.'}
+              </p>
+            </div>
+            <button
+              onClick={toggleTestMode}
+              disabled={saving}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${testMode ? 'bg-amber-500' : 'bg-stone-300'}`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${testMode ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </div>
+
+          {testMode && (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-sm font-semibold text-amber-800">Test mode is ON</p>
+              <p className="text-xs text-amber-700 mt-1">Real payments are disabled. Use Stripe test card: <span className="font-mono font-semibold">4242 4242 4242 4242</span>, any future expiry, any CVC.</p>
+            </div>
+          )}
         </section>
 
         {/* ── Product Types ────────────────────────────────────────────────── */}

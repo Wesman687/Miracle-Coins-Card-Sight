@@ -60,6 +60,15 @@ export default function ShopPage() {
   }
 
   const [search, setSearch] = useState('')
+  const [testMode, setTestMode] = useState(false)
+
+  useEffect(() => {
+    const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1270/api/v1'
+    fetch(`${API}/storefront/options`)
+      .then(r => r.json())
+      .then(data => { if (typeof data.test_mode === 'boolean') setTestMode(data.test_mode) })
+      .catch(() => {})
+  }, [])
 
   const filtered = useMemo(() => {
     if (!search.trim()) return products
@@ -90,6 +99,12 @@ export default function ShopPage() {
   return (
     <PublicLayout title={`${pageTitle} — Miracle Coins`} description="Real precious metal collectible cards and kits.">
       <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+        {testMode && (
+          <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 flex items-center gap-3">
+            <span className="rounded-full bg-amber-400 px-2 py-0.5 text-xs font-bold text-white tracking-wide">TEST MODE</span>
+            <p className="text-sm text-amber-800">Stripe test mode is active — no real payments will be charged. Use card <span className="font-mono font-semibold">4242 4242 4242 4242</span>.</p>
+          </div>
+        )}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <div>

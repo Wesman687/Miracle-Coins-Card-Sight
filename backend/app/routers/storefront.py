@@ -82,6 +82,7 @@ DEFAULT_OPTIONS = {
         {'value': 'bundle', 'label': 'Kit / Set'},
     ],
     'discounts': [],   # [{minTotal: float, pct: float}]
+    'test_mode': False,
 }
 
 
@@ -1500,6 +1501,7 @@ class ProductOptionsRequest(BaseModel):
     metals: Optional[List[Dict[str, Any]]] = None
     types: Optional[List[Dict[str, Any]]] = None
     discounts: Optional[List[Dict[str, Any]]] = None
+    test_mode: Optional[bool] = None
 
 
 @router.put('/storefront/options')
@@ -1514,6 +1516,8 @@ async def update_product_options(
         opts['types'] = req.types
     if req.discounts is not None:
         opts['discounts'] = req.discounts
+    if req.test_mode is not None:
+        opts['test_mode'] = req.test_mode
     save_product_options(opts)
     return opts
 
@@ -1538,9 +1542,16 @@ async def create_checkout_session(
     req: CheckoutSessionRequest,
     db: Session = Depends(get_db),
 ):
-    stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
-    if not stripe.api_key:
-        raise HTTPException(status_code=500, detail='Stripe not configured — add STRIPE_SECRET_KEY to .env')
+    opts = load_product_options()
+    test_mode = opts.get('test_mode', False)
+    if test_mode:
+        stripe.api_key = os.getenv('STRIPE_TEST_SECRET_KEY')
+        if not stripe.api_key:
+            raise HTTPException(status_code=500, detail='Test mode enabled but STRIPE_TEST_SECRET_KEY not set in .env')
+    else:
+        stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
+        if not stripe.api_key:
+            raise HTTPException(status_code=500, detail='Stripe not configured — add STRIPE_SECRET_KEY to .env')
 
     if not req.items:
         raise HTTPException(status_code=400, detail='No items in cart')
@@ -1630,7 +1641,14 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     """Stripe sends POST here after payment. Wire up STRIPE_WEBHOOK_SECRET."""
     payload = await request.body()
     sig_header = request.headers.get('stripe-signature', '')
-    webhook_secret = os.getenv('STRIPE_WEBHOOK_SECRET', '')
+    opts = load_product_options()
+    test_mode = opts.get('test_mode', False)
+    if test_mode:
+        stripe.api_key = os.getenv('STRIPE_TEST_SECRET_KEY', os.getenv('STRIPE_SECRET_KEY', ''))
+        webhook_secret = os.getenv('STRIPE_TEST_WEBHOOK_SECRET', os.getenv('STRIPE_WEBHOOK_SECRET', ''))
+    else:
+        stripe.api_key = os.getenv('STRIPE_SECRET_KEY', '')
+        webhook_secret = os.getenv('STRIPE_WEBHOOK_SECRET', '')
 
     if webhook_secret:
         try:
