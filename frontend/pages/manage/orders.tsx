@@ -92,6 +92,8 @@ export default function OrdersPage() {
   const [notesEdit,    setNotesEdit]    = useState<Record<string, string>>({})
   const [savingKey,    setSavingKey]    = useState<string | null>(null)
   const [deletingKey,  setDeletingKey]  = useState<string | null>(null)
+  const [selected,     setSelected]     = useState<Set<string>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
 
   const loadOrders = useCallback(async () => {
     setLoading(true)
@@ -169,6 +171,38 @@ export default function OrdersPage() {
     }
   }
 
+  async function bulkDelete() {
+    if (selected.size === 0) return
+    if (!confirm(`Delete ${selected.size} order${selected.size !== 1 ? 's' : ''}? This cannot be undone.`)) return
+    setBulkDeleting(true)
+    try {
+      await Promise.all([...selected].map(key =>
+        fetch(`${API}/storefront/admin/orders/group/${encodeURIComponent(key)}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${getToken()}` },
+        })
+      ))
+      setSelected(new Set())
+      await loadOrders()
+    } catch (e: any) {
+      alert('Bulk delete failed: ' + e.message)
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
+  function toggleSelect(key: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    setSelected(prev => prev.size === groups.length ? new Set() : new Set(groups.map(g => g.key)))
+  }
+
   function fmtDate(iso: string | null) {
     if (!iso) return '—'
     return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -184,9 +218,20 @@ export default function OrdersPage() {
             <h1 className="text-2xl font-bold text-stone-800">Orders</h1>
             <p className="text-sm text-stone-500 mt-0.5">{groups.length} orders ({total} line items)</p>
           </div>
-          <a href="/manage" className="text-sm text-stone-500 hover:text-amber-600 transition-colors">
-            ← Back to products
-          </a>
+          <div className="flex items-center gap-3">
+            {selected.size > 0 && (
+              <button
+                onClick={bulkDelete}
+                disabled={bulkDeleting}
+                className="rounded-full bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-50 transition-colors"
+              >
+                {bulkDeleting ? 'Deleting…' : `Delete ${selected.size} selected`}
+              </button>
+            )}
+            <a href="/manage" className="text-sm text-stone-500 hover:text-amber-600 transition-colors">
+              ← Back to products
+            </a>
+          </div>
         </div>
 
         {/* Filters */}
@@ -234,13 +279,33 @@ export default function OrdersPage() {
           <div className="rounded-xl border border-stone-200 bg-white p-12 text-center text-stone-400">No orders found.</div>
         ) : (
           <div className="space-y-2">
+            {/* Select-all row */}
+            <div className="flex items-center gap-3 px-2 py-1">
+              <input
+                type="checkbox"
+                checked={groups.length > 0 && selected.size === groups.length}
+                onChange={toggleSelectAll}
+                className="h-4 w-4 rounded border-stone-300 text-amber-500 focus:ring-amber-400"
+              />
+              <span className="text-xs text-stone-400">
+                {selected.size > 0 ? `${selected.size} of ${groups.length} selected` : `Select all ${groups.length}`}
+              </span>
+            </div>
+
             {groups.map(group => (
-              <div key={group.key} className="rounded-xl border border-stone-200 bg-white overflow-hidden">
+              <div key={group.key} className={`rounded-xl border bg-white overflow-hidden transition-colors ${selected.has(group.key) ? 'border-amber-300 bg-amber-50/30' : 'border-stone-200'}`}>
                 {/* Group header row */}
                 <div
                   className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-stone-50 transition-colors"
                   onClick={() => setExpandedKey(expandedKey === group.key ? null : group.key)}
                 >
+                  <input
+                    type="checkbox"
+                    checked={selected.has(group.key)}
+                    onChange={e => { e.stopPropagation(); toggleSelect(group.key) }}
+                    onClick={e => e.stopPropagation()}
+                    className="h-4 w-4 flex-shrink-0 rounded border-stone-300 text-amber-500 focus:ring-amber-400"
+                  />
                   <div className="flex-1 min-w-0 grid grid-cols-4 gap-4 items-center">
                     <div>
                       <div className="font-medium text-stone-800 text-sm">{group.customer_name || '—'}</div>
