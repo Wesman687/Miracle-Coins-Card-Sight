@@ -82,6 +82,7 @@ DEFAULT_OPTIONS = {
         {'value': 'bundle', 'label': 'Kit / Set'},
     ],
     'discounts': [],   # [{minTotal: float, pct: float}]
+    'defaultOfferPrice': None,  # eBay best-offer auto-accept price applied to all products
 }
 
 
@@ -1500,6 +1501,7 @@ class ProductOptionsRequest(BaseModel):
     metals: Optional[List[Dict[str, Any]]] = None
     types: Optional[List[Dict[str, Any]]] = None
     discounts: Optional[List[Dict[str, Any]]] = None
+    defaultOfferPrice: Optional[float] = None
 
 
 @router.put('/storefront/options')
@@ -1514,6 +1516,8 @@ async def update_product_options(
         opts['types'] = req.types
     if req.discounts is not None:
         opts['discounts'] = req.discounts
+    if 'defaultOfferPrice' in req.model_fields_set:
+        opts['defaultOfferPrice'] = req.defaultOfferPrice if req.defaultOfferPrice else None
     save_product_options(opts)
     return opts
 

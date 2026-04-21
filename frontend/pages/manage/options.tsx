@@ -9,6 +9,7 @@ function getToken() { return getAuth()?.token || 'manage-token' }
 interface MetalOption  { value: string; label: string; basePrice?: number }
 interface TypeOption   { value: string; label: string }
 interface DiscountTier { minTotal: number; pct: number }
+interface CatalogOptions { metals: MetalOption[]; types: TypeOption[]; discounts: DiscountTier[]; defaultOfferPrice?: number | null }
 
 const DEFAULT_METALS: MetalOption[] = [
   { value: 'gold',     label: 'Gold' },
@@ -24,6 +25,7 @@ export default function CatalogOptionsPage() {
   const [metals,    setMetals]    = useState<MetalOption[]>(DEFAULT_METALS)
   const [types,     setTypes]     = useState<TypeOption[]>(DEFAULT_TYPES)
   const [discounts, setDiscounts] = useState<DiscountTier[]>([])
+  const [defaultOfferPrice, setDefaultOfferPrice] = useState('')
   const [saving,    setSaving]    = useState(false)
   const [saved,     setSaved]     = useState(false)
 
@@ -46,6 +48,7 @@ export default function CatalogOptionsPage() {
         if (data.metals?.length)    setMetals(data.metals)
         if (data.types?.length)     setTypes(data.types)
         if (data.discounts?.length) setDiscounts(data.discounts)
+        if (data.defaultOfferPrice != null) setDefaultOfferPrice(String(data.defaultOfferPrice))
       })
       .catch(() => {})
   }, [])
@@ -70,13 +73,19 @@ export default function CatalogOptionsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discounts])
 
-  async function persist(nextMetals: MetalOption[], nextTypes: TypeOption[], nextDiscounts: DiscountTier[]) {
+  async function persist(nextMetals: MetalOption[], nextTypes: TypeOption[], nextDiscounts: DiscountTier[], offerPrice?: string) {
     setSaving(true); setSaved(false)
+    const op = offerPrice !== undefined ? offerPrice : defaultOfferPrice
     try {
       await fetch(`${API}/storefront/options`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-        body: JSON.stringify({ metals: nextMetals, types: nextTypes, discounts: nextDiscounts }),
+        body: JSON.stringify({
+          metals: nextMetals,
+          types: nextTypes,
+          discounts: nextDiscounts,
+          defaultOfferPrice: op ? parseFloat(op) : null,
+        }),
       })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
@@ -246,6 +255,42 @@ export default function CatalogOptionsPage() {
             </button>
           </div>
           <p className="mt-2 text-xs text-stone-400">e.g. Spend $100 or more → 10% off the entire order</p>
+        </section>
+
+        {/* ── eBay Default Offer Price ─────────────────────────────────────── */}
+        <section className="rounded-2xl border border-stone-200 bg-white p-6">
+          <h2 className="mb-1 text-base font-semibold text-stone-900">Default eBay Offer Price</h2>
+          <p className="mb-4 text-sm text-stone-400">
+            When listing on eBay, new products will auto-accept best offers at or above this price.
+            Leave blank to disable best offers by default.
+          </p>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center rounded-xl border border-stone-200 bg-stone-50 overflow-hidden w-36">
+              <span className="pl-3 text-sm text-stone-400">$</span>
+              <input
+                type="number" min="0" step="0.01"
+                value={defaultOfferPrice}
+                onChange={e => setDefaultOfferPrice(e.target.value)}
+                placeholder="e.g. 12.00"
+                className="w-full px-2 py-2.5 text-sm bg-transparent focus:outline-none"
+              />
+            </div>
+            <button
+              onClick={() => persist(metals, types, discounts, defaultOfferPrice)}
+              disabled={saving}
+              className="rounded-full bg-amber-500 px-5 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50 transition-colors"
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+            {defaultOfferPrice && (
+              <button
+                onClick={() => { setDefaultOfferPrice(''); persist(metals, types, discounts, '') }}
+                className="text-sm text-stone-400 hover:text-red-400 transition-colors"
+              >
+                Clear
+              </button>
+            )}
+          </div>
         </section>
 
         {/* ── Metal Types ──────────────────────────────────────────────────── */}

@@ -62,6 +62,11 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
   const [ebayQuantity, setEbayQuantity] = useState(String(product.ebayQuantity || 1))
   const [offerPrice, setOfferPrice] = useState(product.offerPrice ? String(product.offerPrice) : '')
 
+  // Standard pricing / offer toggles
+  const [useStandardPrice, setUseStandardPrice] = useState(!product.price || product.price === 'Price coming soon')
+  const [useStandardOffer, setUseStandardOffer] = useState(!product.offerPrice)
+  const [defaultOfferPrice, setDefaultOfferPrice] = useState<number | null>(null)
+
   // Start with defaults immediately so buttons always show
   const [metals, setMetals] = useState<MetalOption[]>(DEFAULT_METALS)
   const [types, setTypes] = useState<TypeOption[]>(DEFAULT_TYPES)
@@ -105,6 +110,7 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
       .then(data => {
         if (data.metals?.length) setMetals(data.metals)
         if (data.types?.length) setTypes(data.types)
+        if (data.defaultOfferPrice != null) setDefaultOfferPrice(data.defaultOfferPrice)
       })
       .catch(() => {}) // defaults already set
   }, [])
@@ -239,7 +245,13 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
     setSaving(true)
     setError(null)
     try {
-      const priceNum = price ? parseFloat(price) : null
+      const primaryMetal = metals.find(m => m.value === selectedMetals[0])
+      const effectivePrice = useStandardPrice
+        ? (primaryMetal?.basePrice ?? null)
+        : (price ? parseFloat(price) : null)
+      const effectiveOfferPrice = useStandardOffer
+        ? (defaultOfferPrice ?? 0)
+        : (offerPrice ? parseFloat(offerPrice) : 0)
       const res = await fetch(`${API}/storefront/products/${product.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
@@ -248,10 +260,10 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
           metal: selectedMetals[0],
           metals: selectedMetals,
           product_type: productType,
-          price: priceNum,
+          price: effectivePrice,
           quantity: unlimited ? 0 : (parseInt(quantity) || 1),
           ebay_quantity: parseInt(ebayQuantity) || 1,
-          offer_price: offerPrice ? parseFloat(offerPrice) : 0,
+          offer_price: effectiveOfferPrice,
         }),
       })
       if (!res.ok) throw new Error(`Save failed (${res.status})`)
@@ -271,13 +283,20 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
     setEbayPublishing(true)
     setEbayResult(null)
     try {
+      const primaryMetal = metals.find(m => m.value === selectedMetals[0])
+      const effectivePrice = useStandardPrice
+        ? (primaryMetal?.basePrice ?? undefined)
+        : (price ? parseFloat(price) : undefined)
+      const effectiveOfferPrice = useStandardOffer
+        ? (defaultOfferPrice ?? undefined)
+        : (offerPrice ? parseFloat(offerPrice) : undefined)
       const res = await fetch(`${API}/storefront/products/${product.id}/ebay-publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
         body: JSON.stringify({
-          price: price ? parseFloat(price) : undefined,
+          price: effectivePrice,
           quantity: parseInt(ebayQuantity) || 1,
-          offer_price: offerPrice ? parseFloat(offerPrice) : undefined,
+          offer_price: effectiveOfferPrice,
         }),
       })
       if (!res.ok) {
@@ -468,17 +487,34 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
             {/* Price + Quantity */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-stone-700">
-                  Price ($)
-                  <span className="ml-1 text-xs font-normal text-stone-400">override</span>
-                </label>
-                <input
-                  type="number" min="0" step="0.01"
-                  value={price}
-                  onChange={e => setPrice(e.target.value)}
-                  placeholder={selectedMetal?.basePrice != null ? String(selectedMetal.basePrice) : '0.00'}
-                  className="w-full rounded-xl border border-stone-200 px-4 py-2.5 text-sm text-stone-900 placeholder-stone-300 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
-                />
+                <div className="mb-1.5 flex items-center justify-between">
+                  <label className="text-sm font-medium text-stone-700">Price ($)</label>
+                  {selectedMetal?.basePrice != null && (
+                    <label className="flex items-center gap-1.5 text-xs text-stone-500 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={useStandardPrice}
+                        onChange={e => setUseStandardPrice(e.target.checked)}
+                        className="accent-amber-500"
+                      />
+                      Standard
+                    </label>
+                  )}
+                </div>
+                {useStandardPrice && selectedMetal?.basePrice != null ? (
+                  <div className="flex items-center rounded-xl border border-stone-200 bg-stone-50 px-4 py-2.5 text-sm text-stone-500">
+                    ${selectedMetal.basePrice.toFixed(2)}
+                    <span className="ml-1.5 text-xs text-stone-400">(standard)</span>
+                  </div>
+                ) : (
+                  <input
+                    type="number" min="0" step="0.01"
+                    value={price}
+                    onChange={e => setPrice(e.target.value)}
+                    placeholder={selectedMetal?.basePrice != null ? String(selectedMetal.basePrice) : '0.00'}
+                    className="w-full rounded-xl border border-stone-200 px-4 py-2.5 text-sm text-stone-900 placeholder-stone-300 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                  />
+                )}
               </div>
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
@@ -562,18 +598,35 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
             />
             <span className="text-xs text-stone-400">Separate from website stock</span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <label className="text-xs font-medium text-stone-500 w-24 flex-shrink-0">Accept offers ≥</label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-stone-400">$</span>
-              <input
-                type="number" min="0" step="0.01"
-                value={offerPrice}
-                onChange={e => setOfferPrice(e.target.value)}
-                placeholder="—"
-                className="w-24 rounded-lg border border-stone-200 pl-6 pr-2 py-1.5 text-sm text-stone-800 placeholder-stone-300 focus:border-amber-400 focus:outline-none"
-              />
-            </div>
+            {useStandardOffer && defaultOfferPrice != null ? (
+              <div className="flex items-center rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm text-stone-500 min-w-[6rem]">
+                ${defaultOfferPrice.toFixed(2)}
+              </div>
+            ) : (
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-stone-400">$</span>
+                <input
+                  type="number" min="0" step="0.01"
+                  value={offerPrice}
+                  onChange={e => setOfferPrice(e.target.value)}
+                  placeholder="—"
+                  className="w-24 rounded-lg border border-stone-200 pl-6 pr-2 py-1.5 text-sm text-stone-800 placeholder-stone-300 focus:border-amber-400 focus:outline-none"
+                />
+              </div>
+            )}
+            {defaultOfferPrice != null && (
+              <label className="flex items-center gap-1.5 text-xs text-stone-500 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={useStandardOffer}
+                  onChange={e => setUseStandardOffer(e.target.checked)}
+                  className="accent-amber-500"
+                />
+                Standard
+              </label>
+            )}
             <span className="text-xs text-stone-400">Auto-accept best offer at this price</span>
           </div>
         </div>

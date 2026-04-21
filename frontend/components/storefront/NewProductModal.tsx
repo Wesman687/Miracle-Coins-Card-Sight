@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import PhotoEditor from './PhotoEditor'
 import CameraCapture from './CameraCapture'
 
@@ -7,6 +7,8 @@ import { getAuth } from '../../lib/auth'
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1270/api/v1'
 function getToken() { return getAuth()?.token || 'manage-token' }
 
+interface MetalOption { value: string; label: string; basePrice?: number }
+
 interface Props {
   onClose: () => void
   onSaved: () => void
@@ -14,11 +16,17 @@ interface Props {
 
 type ImageStage = 'empty' | 'camera' | 'editing' | 'done'
 
-const METALS = [
-  { value: 'gold', label: 'Gold', color: 'border-amber-400 bg-amber-50 text-amber-700' },
-  { value: 'platinum', label: 'Platinum', color: 'border-slate-400 bg-slate-50 text-slate-700' },
-  { value: 'silver', label: 'Silver', color: 'border-gray-400 bg-gray-50 text-gray-700' },
+const DEFAULT_METALS: MetalOption[] = [
+  { value: 'gold', label: 'Gold' },
+  { value: 'platinum', label: 'Platinum' },
+  { value: 'silver', label: 'Silver' },
 ]
+
+const METAL_COLORS: Record<string, string> = {
+  gold: 'border-amber-400 bg-amber-50 text-amber-700',
+  platinum: 'border-slate-400 bg-slate-50 text-slate-700',
+  silver: 'border-gray-400 bg-gray-50 text-gray-700',
+}
 
 const TYPES = [
   { value: 'card', label: 'Card' },
@@ -32,16 +40,35 @@ const WEIGHT_DEFAULTS: Record<string, string> = {
 }
 
 export default function NewProductModal({ onClose, onSaved }: Props) {
+  // Options from server (metal base prices, default offer price)
+  const [metals, setMetals] = useState<MetalOption[]>(DEFAULT_METALS)
+  const [defaultOfferPrice, setDefaultOfferPrice] = useState<number | null>(null)
+
+  useEffect(() => {
+    fetch(`${API}/storefront/options`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.metals?.length) setMetals(data.metals)
+        if (data.defaultOfferPrice != null) setDefaultOfferPrice(data.defaultOfferPrice)
+      })
+      .catch(() => {})
+  }, [])
+
   // Form state
   const [title, setTitle] = useState('')
   const [selectedMetals, setSelectedMetals] = useState<string[]>(['gold'])
   const [productType, setProductType] = useState('card')
-  const [price, setPrice] = useState('')
+  const [useStandardPrice, setUseStandardPrice] = useState(true)
+  const [customPrice, setCustomPrice] = useState('')
   const [weightLabel, setWeightLabel] = useState('1/4 grain gold')
   const [description, setDescription] = useState('')
   const [quantity, setQuantity] = useState('1')
   const [unlimited, setUnlimited] = useState(false)
   const [ebayQuantity, setEbayQuantity] = useState('1')
+
+  // Derived: the primary metal's base price from options
+  const primaryMetal = metals.find(m => m.value === selectedMetals[0])
+  const standardPrice = primaryMetal?.basePrice ?? null
 
   // Image state
   const [imageStage, setImageStage] = useState<ImageStage>('empty')
@@ -49,11 +76,11 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
   const [finalImage, setFinalImage] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-
   // eBay listing option
   const [listOnEbay, setListOnEbay] = useState(false)
   const [ebayStatus, setEbayStatus] = useState<string | null>(null)
-  const [offerPrice, setOfferPrice] = useState('')
+  const [useStandardOffer, setUseStandardOffer] = useState(true)
+  const [customOfferPrice, setCustomOfferPrice] = useState('')
 
   // AI description
   const [generatingDesc, setGeneratingDesc] = useState(false)
@@ -143,6 +170,16 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
         imageUrls = [url]
       }
 
+      // Resolve price: standard (metal base price) or custom
+      const effectivePrice = useStandardPrice
+        ? (standardPrice ?? null)
+        : (customPrice ? parseFloat(customPrice) : null)
+
+      // Resolve offer price: standard (global default) or custom
+      const effectiveOfferPrice = useStandardOffer
+        ? (defaultOfferPrice ?? undefined)
+        : (customOfferPrice ? parseFloat(customOfferPrice) : undefined)
+
       // Create product
       const res = await fetch(`${API}/storefront/products`, {
         method: 'POST',
@@ -152,7 +189,7 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
           metal: selectedMetals[0],
           metals: selectedMetals,
           product_type: productType,
-          price: price ? parseFloat(price) : null,
+          price: effectivePrice,
           description: description.trim(),
           weight_label: weightLabel.trim(),
           quantity: unlimited ? 0 : (parseInt(quantity) || 1),
@@ -171,9 +208,9 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
             body: JSON.stringify({
-              price: price ? parseFloat(price) : undefined,
+              price: effectivePrice ?? undefined,
               quantity: parseInt(ebayQuantity) || 1,
-              offer_price: offerPrice ? parseFloat(offerPrice) : undefined,
+              offer_price: effectiveOfferPrice,
             }),
           })
           if (!ebayRes.ok) {
@@ -310,18 +347,20 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
                 <span className="ml-1.5 text-xs font-normal text-stone-400">select all that apply</span>
               </label>
               <div className="flex gap-2">
-                {METALS.map(m => {
+                {metals.map(m => {
                   const active = selectedMetals.includes(m.value)
+                  const color = METAL_COLORS[m.value] ?? 'border-stone-400 bg-stone-50 text-stone-700'
                   return (
                     <button
                       key={m.value}
                       type="button"
                       onClick={() => toggleMetal(m.value)}
                       className={`flex-1 rounded-xl border-2 py-2 text-sm font-medium transition-colors ${
-                        active ? m.color + ' border-current' : 'border-stone-200 text-stone-500 hover:border-stone-300'
+                        active ? color + ' border-current' : 'border-stone-200 text-stone-500 hover:border-stone-300'
                       }`}
                     >
                       {m.label}
+                      {m.basePrice != null && <span className="ml-1 text-xs opacity-60">${m.basePrice}</span>}
                     </button>
                   )
                 })}
@@ -354,14 +393,34 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
             {/* Price + Quantity */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-stone-700">Price ($)</label>
-                <input
-                  type="number" min="0" step="0.01"
-                  value={price}
-                  onChange={e => setPrice(e.target.value)}
-                  placeholder="14.00"
-                  className="w-full rounded-xl border border-stone-200 px-4 py-2.5 text-sm text-stone-900 placeholder-stone-300 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
-                />
+                <div className="mb-1.5 flex items-center justify-between">
+                  <label className="text-sm font-medium text-stone-700">Price ($)</label>
+                  {standardPrice != null && (
+                    <label className="flex items-center gap-1.5 text-xs text-stone-500 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={useStandardPrice}
+                        onChange={e => setUseStandardPrice(e.target.checked)}
+                        className="accent-amber-500"
+                      />
+                      Standard
+                    </label>
+                  )}
+                </div>
+                {useStandardPrice && standardPrice != null ? (
+                  <div className="flex items-center rounded-xl border border-stone-200 bg-stone-50 px-4 py-2.5 text-sm text-stone-500">
+                    ${standardPrice.toFixed(2)}
+                    <span className="ml-1.5 text-xs text-stone-400">(standard)</span>
+                  </div>
+                ) : (
+                  <input
+                    type="number" min="0" step="0.01"
+                    value={customPrice}
+                    onChange={e => setCustomPrice(e.target.value)}
+                    placeholder="14.00"
+                    className="w-full rounded-xl border border-stone-200 px-4 py-2.5 text-sm text-stone-900 placeholder-stone-300 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                  />
+                )}
               </div>
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
@@ -448,15 +507,35 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
                     <p className="mt-1 text-xs text-stone-400">Separate from website stock — how many to list on eBay</p>
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-xs font-medium text-stone-600">Best Offer Auto-Accept Price ($) <span className="text-stone-400 font-normal">optional</span></label>
-                    <input
-                      type="number" min="0" step="0.01"
-                      value={offerPrice}
-                      onChange={e => setOfferPrice(e.target.value)}
-                      placeholder="e.g. 12.00"
-                      className="w-40 rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:border-amber-400 focus:outline-none"
-                    />
-                    <p className="mt-1 text-xs text-stone-400">eBay will auto-accept offers at or above this price</p>
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <label className="text-xs font-medium text-stone-600">Best Offer Auto-Accept ($)</label>
+                      {defaultOfferPrice != null && (
+                        <label className="flex items-center gap-1.5 text-xs text-stone-500 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={useStandardOffer}
+                            onChange={e => setUseStandardOffer(e.target.checked)}
+                            className="accent-amber-500"
+                          />
+                          Standard
+                        </label>
+                      )}
+                    </div>
+                    {useStandardOffer && defaultOfferPrice != null ? (
+                      <div className="flex items-center rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-500 w-40">
+                        ${defaultOfferPrice.toFixed(2)}
+                        <span className="ml-1.5 text-xs text-stone-400">(standard)</span>
+                      </div>
+                    ) : (
+                      <input
+                        type="number" min="0" step="0.01"
+                        value={customOfferPrice}
+                        onChange={e => setCustomOfferPrice(e.target.value)}
+                        placeholder={defaultOfferPrice == null ? 'e.g. 12.00 (optional)' : 'Custom'}
+                        className="w-40 rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:border-amber-400 focus:outline-none"
+                      />
+                    )}
+                    <p className="mt-1 text-xs text-stone-400">eBay auto-accepts offers at or above this price</p>
                   </div>
                 </div>
               )}
