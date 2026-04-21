@@ -37,7 +37,8 @@ export default function CatalogOptionsPage() {
   const [newMin, setNewMin] = useState('')
   const [newPct, setNewPct] = useState('')
 
-  const [testMode, setTestMode] = useState(false)
+  const [testMode, setTestMode]       = useState(false)
+  const [inquiryMode, setInquiryMode] = useState(false)
 
   useEffect(() => {
     fetch(`${API}/storefront/options`)
@@ -47,6 +48,7 @@ export default function CatalogOptionsPage() {
         if (data.types?.length)     setTypes(data.types)
         if (data.discounts?.length) setDiscounts(data.discounts)
         if (typeof data.test_mode === 'boolean') setTestMode(data.test_mode)
+        if (typeof data.inquiry_mode === 'boolean') setInquiryMode(data.inquiry_mode)
       })
       .catch(() => {})
   }, [])
@@ -71,7 +73,10 @@ export default function CatalogOptionsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discounts])
 
-  async function persist(nextMetals: MetalOption[], nextTypes: TypeOption[], nextDiscounts: DiscountTier[], nextTestMode?: boolean) {
+  async function persist(
+    nextMetals: MetalOption[], nextTypes: TypeOption[], nextDiscounts: DiscountTier[],
+    nextTestMode?: boolean, nextInquiryMode?: boolean,
+  ) {
     setSaving(true); setSaved(false)
     try {
       await fetch(`${API}/storefront/options`, {
@@ -80,6 +85,7 @@ export default function CatalogOptionsPage() {
         body: JSON.stringify({
           metals: nextMetals, types: nextTypes, discounts: nextDiscounts,
           test_mode: nextTestMode ?? testMode,
+          inquiry_mode: nextInquiryMode ?? inquiryMode,
         }),
       })
       setSaved(true)
@@ -92,6 +98,12 @@ export default function CatalogOptionsPage() {
     const next = !testMode
     setTestMode(next)
     await persist(metals, types, discounts, next)
+  }
+
+  async function toggleInquiryMode() {
+    const next = !inquiryMode
+    setInquiryMode(next)
+    await persist(metals, types, discounts, undefined, next)
   }
 
   function saveMetalEdits() {
@@ -342,6 +354,31 @@ export default function CatalogOptionsPage() {
             <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
               <p className="text-sm font-semibold text-amber-800">Test mode is ON</p>
               <p className="text-xs text-amber-700 mt-1">Real payments are disabled. Use Stripe test card: <span className="font-mono font-semibold">4242 4242 4242 4242</span>, any future expiry, any CVC.</p>
+            </div>
+          )}
+
+          <div className="mt-3 flex items-center justify-between rounded-xl border border-stone-200 bg-stone-50 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-stone-800">Inquiry Mode</p>
+              <p className="text-xs text-stone-400 mt-0.5">
+                {inquiryMode
+                  ? 'Active — customers submit order requests instead of paying. You receive a Discord notification.'
+                  : 'Inactive — customers pay through Stripe normally.'}
+              </p>
+            </div>
+            <button
+              onClick={toggleInquiryMode}
+              disabled={saving}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${inquiryMode ? 'bg-amber-500' : 'bg-stone-300'}`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${inquiryMode ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </div>
+
+          {inquiryMode && (
+            <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+              <p className="text-sm font-semibold text-blue-800">Inquiry mode is ON</p>
+              <p className="text-xs text-blue-700 mt-1">Customers will see a contact form at checkout instead of Stripe. You&apos;ll get a Discord message with their cart and contact info. Admins still use Stripe.</p>
             </div>
           )}
         </section>

@@ -83,6 +83,7 @@ DEFAULT_OPTIONS = {
     ],
     'discounts': [],   # [{minTotal: float, pct: float}]
     'test_mode': False,
+    'inquiry_mode': False,
 }
 
 
@@ -1502,6 +1503,7 @@ class ProductOptionsRequest(BaseModel):
     types: Optional[List[Dict[str, Any]]] = None
     discounts: Optional[List[Dict[str, Any]]] = None
     test_mode: Optional[bool] = None
+    inquiry_mode: Optional[bool] = None
 
 
 @router.put('/storefront/options')
@@ -1518,6 +1520,8 @@ async def update_product_options(
         opts['discounts'] = req.discounts
     if req.test_mode is not None:
         opts['test_mode'] = req.test_mode
+    if req.inquiry_mode is not None:
+        opts['inquiry_mode'] = req.inquiry_mode
     save_product_options(opts)
     return opts
 
@@ -1710,6 +1714,85 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         )
 
     return {'received': True}
+
+
+# ---------------------------------------------------------------------------
+# Inquiry checkout (no payment — sends notification to admin)
+# ---------------------------------------------------------------------------
+
+class InquiryItem(BaseModel):
+    product_id: int
+    qty: int = 1
+
+class InquiryCheckoutRequest(BaseModel):
+    items: List[InquiryItem]
+    name: str
+    email: str
+    phone: Optional[str] = None
+    note: Optional[str] = None
+
+
+@router.post('/storefront/checkout/inquiry')
+async def create_checkout_inquiry(req: InquiryCheckoutRequest, db: Session = Depends(get_db)):
+    """Non-payment checkout: record inquiry and notify admin via Discord."""
+    if not req.items:
+        raise HTTPException(status_code=400, detail='No items in cart')
+
+    # Look up product details
+    ids = [item.product_id for item in req.items]
+    placeholders = ', '.join(f':id{i}' for i in range(len(ids)))
+    params = {f'id{i}': id_ for i, id_ in enumerate(ids)}
+    rows = db.execute(
+        text(f"SELECT id, title, computed_price, shopify_metadata FROM coins WHERE id IN ({placeholders}) AND status = 'active'"),
+        params,
+    ).fetchall()
+    by_id = {r.id: r for r in rows}
+
+    lines = []
+    order_total = 0.0
+    for item in req.items:
+        row = by_id.get(item.product_id)
+        if not row:
+            continue
+        meta = parse_json(row.shopify_metadata, {})
+        name = meta.get('storefront', {}).get('name') or row.title
+        price = float(row.computed_price or 0)
+        subtotal = price * item.qty
+        order_total += subtotal
+        lines.append(f'  • {item.qty}x {name} — ${subtotal:.2f}' if price else f'  • {item.qty}x {name}')
+        # Save as inquiry order
+        db.execute(text("""
+            INSERT INTO orders (external_order_id, customer_email, customer_name, coin_id,
+                                product_name, qty, sold_price, channel, status, notes)
+            VALUES (:eid, :email, :name, :coin_id, :pname, :qty, :price, 'inquiry', 'inquiry', :notes)
+        """), {
+            'eid': f'inquiry-{uuid.uuid4().hex[:12]}',
+            'email': req.email,
+            'name': req.name,
+            'coin_id': row.id,
+            'pname': name,
+            'qty': item.qty,
+            'price': price if price else None,
+            'notes': req.note or None,
+        })
+    db.commit()
+
+    cart_str = '\n'.join(lines) if lines else '  (no items matched)'
+    contact_str = req.name
+    if req.email:
+        contact_str += f' <{req.email}>'
+    if req.phone:
+        contact_str += f' | {req.phone}'
+
+    _discord_notify(
+        f'**New Order Request** :shopping_cart:\n'
+        f'From: {contact_str}\n'
+        f'Items:\n{cart_str}\n'
+        f'**Total: ${order_total:.2f}**'
+        + (f'\nNote: {req.note}' if req.note else '')
+    )
+
+    return {'ok': True}
 
 
 # ---------------------------------------------------------------------------
