@@ -1853,13 +1853,6 @@ async def admin_list_orders(
     _: str = Depends(verify_admin_token),
 ):
     ensure_orders_table(db)
-    # Older production DBs may have an existing customers table without newer
-    # profile columns; ensure migration-style adds run before selecting them.
-    try:
-        from app.routers.auth_router import ensure_customers_table
-        ensure_customers_table(db)
-    except Exception:
-        pass
 
     sort_map = {
         'date_desc': 'o.created_at DESC',
@@ -1885,34 +1878,27 @@ async def admin_list_orders(
 
     where_sql = ('WHERE ' + ' AND '.join(where_clauses)) if where_clauses else ''
 
-    try:
-        rows = db.execute(text(f"""
-            SELECT o.id, o.external_order_id, o.customer_id, o.customer_email, o.customer_name,
-                   o.coin_id, o.product_name, o.qty, o.sold_price, o.channel,
-                   o.status, o.tracking_number, o.notes, o.created_at, o.updated_at,
-                   c.name AS customer_profile_name,
-                   c.phone AS customer_phone,
-                   c.address_line1, c.address_line2, c.city, c.state_province, c.zip_code, c.country
-            FROM orders o
-            LEFT JOIN customers c ON (
-                c.id = o.customer_id
-                OR (o.customer_id IS NULL AND LOWER(c.email) = LOWER(o.customer_email))
-            )
-            {where_sql}
-            ORDER BY {order_by}
-            LIMIT :limit OFFSET :offset
-        """), params).fetchall()
-    except Exception:
-        # Fallback for environments where customer profile columns/table are not present yet.
-        rows = db.execute(text(f"""
-            SELECT o.id, o.external_order_id, o.customer_id, o.customer_email, o.customer_name,
-                   o.coin_id, o.product_name, o.qty, o.sold_price, o.channel,
-                   o.status, o.tracking_number, o.notes, o.created_at, o.updated_at
-            FROM orders o
-            {where_sql}
-            ORDER BY {order_by}
-            LIMIT :limit OFFSET :offset
-        """), params).fetchall()
+    rows = db.execute(text(f"""
+        SELECT o.id, o.external_order_id, o.customer_id, o.customer_email, o.customer_name,
+               o.coin_id, o.product_name, o.qty, o.sold_price, o.channel,
+               o.status, o.tracking_number, o.notes, o.created_at, o.updated_at,
+               c.name AS customer_profile_name,
+               to_jsonb(c)->>'phone' AS customer_phone,
+               to_jsonb(c)->>'address_line1' AS address_line1,
+               to_jsonb(c)->>'address_line2' AS address_line2,
+               to_jsonb(c)->>'city' AS city,
+               to_jsonb(c)->>'state_province' AS state_province,
+               to_jsonb(c)->>'zip_code' AS zip_code,
+               to_jsonb(c)->>'country' AS country
+        FROM orders o
+        LEFT JOIN customers c ON (
+            c.id = o.customer_id
+            OR (o.customer_id IS NULL AND LOWER(c.email) = LOWER(o.customer_email))
+        )
+        {where_sql}
+        ORDER BY {order_by}
+        LIMIT :limit OFFSET :offset
+    """), params).fetchall()
 
     total = db.execute(text(f'SELECT COUNT(*) FROM orders o {where_sql}'), {k: v for k, v in params.items() if k not in ('limit', 'offset')}).scalar()
 
