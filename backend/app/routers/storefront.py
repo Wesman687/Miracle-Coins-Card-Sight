@@ -679,6 +679,25 @@ async def upload_product_image(
     return {'url': f'{LOCAL_API_URL}/uploads/{filename}'}
 
 
+@router.put('/storefront/admin/sync-upload/{filename}')
+async def sync_upload(
+    filename: str,
+    file: UploadFile = File(...),
+    _: str = Depends(verify_admin_token),
+):
+    """Upload a file preserving its exact filename. Used by the sync script to push local uploads to server."""
+    safe_name = Path(filename).name  # strip any path components
+    if not safe_name or '..' in safe_name:
+        raise HTTPException(status_code=400, detail='Invalid filename')
+    upload_dir = Path('uploads')
+    upload_dir.mkdir(exist_ok=True)
+    dest = upload_dir / safe_name
+    if dest.exists():
+        return {'status': 'exists', 'filename': safe_name}
+    dest.write_bytes(await file.read())
+    return {'status': 'uploaded', 'filename': safe_name}
+
+
 @router.post('/storefront/products')
 async def create_product(
     req: CreateProductRequest,
