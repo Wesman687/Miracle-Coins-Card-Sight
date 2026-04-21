@@ -1917,7 +1917,7 @@ async def admin_update_order_status(
     order_id: int,
     db: Session = Depends(get_db),
     _: str = Depends(verify_admin_token),
-    status: str = Query(..., pattern='^(paid|shipped|delivered|refunded|cancelled)$'),
+    status: str = Query(..., pattern='^(paid|shipped|delivered|refunded|cancelled|inquiry)$'),
 ):
     ensure_orders_table(db)
     result = db.execute(text("""
@@ -1927,5 +1927,18 @@ async def admin_update_order_status(
     db.commit()
     if not row:
         raise HTTPException(status_code=404, detail='Order not found')
+    return {'success': True}
+
+
+@router.delete('/storefront/admin/orders/group/{external_order_id}')
+async def admin_delete_order_group(
+    external_order_id: str,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_admin_token),
+):
+    """Delete all order rows sharing the same external_order_id."""
+    ensure_orders_table(db)
+    db.execute(text('DELETE FROM orders WHERE external_order_id = :eid'), {'eid': external_order_id})
+    db.commit()
     return {'success': True}
 
