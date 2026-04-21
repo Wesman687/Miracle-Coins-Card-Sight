@@ -1301,7 +1301,7 @@ async def bootstrap_import_catalog(
                 """
             ),
             {
-                'sku': f'MC-{slug[:40].upper().replace('-', '')}',
+                'sku': f"MC-{slug[:40].upper().replace('-', '')}",
                 'title': title,
                 'category': f'{metal}-card',
                 'description': payload.get('description') or '',
