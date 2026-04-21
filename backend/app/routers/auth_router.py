@@ -177,11 +177,46 @@ async def unified_login(req: LoginRequest, db: Session = Depends(get_db)):
                         'isAdmin': True,
                     }
 
+                # For non-admin users validated by stream-lineai, ensure a local
+                # customer row exists so account/profile/orders endpoints can key by customer_id.
+                ensure_customers_table(db)
+                normalized_email = (email or req.email).lower().strip()
+                customer = db.execute(
+                    text('SELECT id, name FROM customers WHERE email = :email'),
+                    {'email': normalized_email}
+                ).fetchone()
+                if customer:
+                    customer_id = customer.id
+                    customer_name = customer.name or name
+                else:
+                    pw_hash = hash_password(req.password)
+                    created = db.execute(
+                        text("""
+                            INSERT INTO customers (email, name, password_hash)
+                            VALUES (:email, :name, :pw)
+                            RETURNING id
+                        """),
+                        {
+                            'email': normalized_email,
+                            'name': (name or normalized_email.split('@')[0]).strip(),
+                            'pw': pw_hash,
+                        }
+                    ).fetchone()
+                    db.commit()
+                    customer_id = created.id
+                    customer_name = name or normalized_email.split('@')[0]
+
+                local_customer_token = make_token({
+                    'sub': normalized_email,
+                    'role': 'customer',
+                    'customer_id': customer_id,
+                })
                 return {
-                    'token': token,
-                    'role': role,
-                    'email': email,
-                    'name': name,
+                    'token': local_customer_token,
+                    'role': 'customer',
+                    'email': normalized_email,
+                    'name': customer_name,
+                    'customerId': customer_id,
                     'isAdmin': False,
                 }
     except Exception:
