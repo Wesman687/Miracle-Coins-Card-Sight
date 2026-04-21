@@ -14,10 +14,11 @@ interface Props {
 
 export default function CartDrawer({ open, onClose }: Props) {
   const { items, count, total, removeItem, updateQty, clearCart } = useCart()
-  const [discounts, setDiscounts]     = useState<DiscountTier[]>([])
-  const [inquiryMode, setInquiryMode] = useState(false)
-  const [admin, setAdmin]             = useState(false)
-  const [authUser, setAuthUser]       = useState<ReturnType<typeof getAuth>>(null)
+  const [discounts, setDiscounts]       = useState<DiscountTier[]>([])
+  const [inquiryMode, setInquiryMode]   = useState(false)
+  const [admin, setAdmin]               = useState(false)
+  const [authUser, setAuthUser]         = useState<ReturnType<typeof getAuth>>(null)
+  const [profilePhone, setProfilePhone] = useState<string | null>(null)  // from account
   const loadedRef = useRef(false)
 
   // Inquiry form state
@@ -27,10 +28,31 @@ export default function CartDrawer({ open, onClose }: Props) {
   const [inquiryError, setInquiryError] = useState('')
   const [submitting,   setSubmitting]   = useState(false)
 
+  function formatPhone(raw: string): string {
+    const digits = raw.replace(/\D/g, '').slice(0, 10)
+    if (digits.length <= 3) return digits
+    if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
+  }
+
   useEffect(() => {
     const a = getAuth()
     setAdmin(checkAdmin())
     setAuthUser(a)
+    // Fetch customer profile to get saved phone
+    if (a?.customerId) {
+      fetch(`${API}/auth/customer/profile/${a.customerId}`, {
+        headers: { Authorization: `Bearer ${a.token}` },
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data?.phone) {
+            setProfilePhone(data.phone)
+            setInquiryPhone(data.phone)
+          }
+        })
+        .catch(() => {})
+    }
   }, [])
 
   useEffect(() => {
@@ -82,6 +104,15 @@ export default function CartDrawer({ open, onClose }: Props) {
       }
       setInquirySent(true)
       clearCart()
+      // Save phone to account if it was newly entered
+      const phone = inquiryPhone.trim()
+      if (phone && !profilePhone && authUser?.customerId) {
+        fetch(`${API}/auth/customer/profile/${authUser.customerId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body: JSON.stringify({ phone }),
+        }).catch(() => {})
+      }
     } catch {
       setInquiryError('Could not send request. Please try again.')
     } finally {
@@ -255,17 +286,25 @@ export default function CartDrawer({ open, onClose }: Props) {
                     </div>
                     <p className="text-xs text-stone-400 -mt-2">We&apos;ll contact you to arrange payment and shipping.</p>
                     <div className="space-y-2">
-                      <input
-                        type="tel" placeholder="Phone (optional)" value={inquiryPhone}
-                        onChange={e => setInquiryPhone(e.target.value)}
-                        className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
-                      />
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-stone-500">
+                          Phone {!profilePhone && <span className="text-red-400">*</span>}
+                        </label>
+                        <input
+                          type="tel" value={inquiryPhone}
+                          onChange={e => setInquiryPhone(formatPhone(e.target.value))}
+                          placeholder="(555) 000-0000"
+                          readOnly={!!profilePhone}
+                          className={`w-full rounded-xl border px-3 py-2.5 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400 ${profilePhone ? 'border-stone-100 bg-stone-50 text-stone-500' : 'border-stone-200'}`}
+                        />
+                      </div>
                       <textarea
                         placeholder="Any notes? (optional)" value={inquiryNote}
                         onChange={e => setInquiryNote(e.target.value)} rows={2}
                         className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400 resize-none"
                       />
                     </div>
+
                     {inquiryError && <p className="text-xs text-red-500">{inquiryError}</p>}
                     <button
                       onClick={handleInquiry} disabled={submitting}

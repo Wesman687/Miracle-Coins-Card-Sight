@@ -10,7 +10,7 @@ import requests
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -303,8 +303,75 @@ async def customer_login(req: CustomerLoginRequest, db: Session = Depends(get_db
 
 @router.get('/auth/customer/me')
 async def customer_me(db: Session = Depends(get_db), authorization: str = ''):
-    # Token passed as query param or header — handled in frontend via fetch
     raise HTTPException(status_code=401, detail='Use Authorization header')
+
+
+@router.get('/auth/customer/profile/{customer_id}')
+async def get_customer_profile(customer_id: int, request: Request, db: Session = Depends(get_db)):
+    """Return the customer's profile including phone and address."""
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        raise HTTPException(status_code=401, detail='Not authenticated')
+    payload = decode_token(auth_header[7:])
+    if not payload or payload.get('customer_id') != customer_id:
+        raise HTTPException(status_code=403, detail='Forbidden')
+
+    ensure_customers_table(db)
+    row = db.execute(
+        text('SELECT id, name, email, phone, address_line1, address_line2, city, state_province, zip_code, country FROM customers WHERE id = :id'),
+        {'id': customer_id}
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail='Customer not found')
+    return {
+        'id': row.id, 'name': row.name, 'email': row.email,
+        'phone': row.phone,
+        'address_line1': row.address_line1, 'address_line2': row.address_line2,
+        'city': row.city, 'state_province': row.state_province,
+        'zip_code': row.zip_code, 'country': row.country,
+    }
+
+
+class CustomerProfileUpdateRequest(BaseModel):
+    phone: Optional[str] = None
+    address_line1: Optional[str] = None
+    address_line2: Optional[str] = None
+    city: Optional[str] = None
+    state_province: Optional[str] = None
+    zip_code: Optional[str] = None
+    country: Optional[str] = None
+
+
+@router.patch('/auth/customer/profile/{customer_id}')
+async def update_customer_profile(
+    customer_id: int,
+    req: CustomerProfileUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Update phone and/or address for a customer."""
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        raise HTTPException(status_code=401, detail='Not authenticated')
+    payload = decode_token(auth_header[7:])
+    if not payload or payload.get('customer_id') != customer_id:
+        raise HTTPException(status_code=403, detail='Forbidden')
+
+    ensure_customers_table(db)
+    fields, params = [], {'id': customer_id}
+    for attr, col in [
+        ('phone', 'phone'), ('address_line1', 'address_line1'), ('address_line2', 'address_line2'),
+        ('city', 'city'), ('state_province', 'state_province'), ('zip_code', 'zip_code'), ('country', 'country'),
+    ]:
+        val = getattr(req, attr)
+        if val is not None:
+            fields.append(f'{col} = :{attr}')
+            params[attr] = val
+    if not fields:
+        return {'ok': True}
+    db.execute(text(f"UPDATE customers SET {', '.join(fields)}, updated_at = NOW() WHERE id = :id"), params)
+    db.commit()
+    return {'ok': True}
 
 
 @router.get('/auth/customer/orders/{customer_id}')

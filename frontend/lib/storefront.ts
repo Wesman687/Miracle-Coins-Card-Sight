@@ -3,11 +3,18 @@ import { StoreProduct } from '../data/storefront'
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1270/api/v1'
 const MEDIA_BASE = API_BASE.replace(/\/api\/v1$/, '')
 
+const SERVER_BASE = 'https://server.stream-lineai.com/miracle-coins'
+
 export function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null
-  // Fix full URLs that point to /uploads/ without the /miracle-coins/ prefix
+  // Localhost upload URLs → always serve from production server
+  if (url.includes('localhost') && url.includes('/uploads/')) {
+    const path = url.split('/uploads/').pop()
+    return `${SERVER_BASE}/uploads/${path}`
+  }
+  // Fix server URLs missing the /miracle-coins/ prefix
   if (url.match(/https?:\/\/server\.stream-lineai\.com\/uploads\//)) {
-    return url.replace(/https?:\/\/server\.stream-lineai\.com\/uploads\//, `${MEDIA_BASE}/uploads/`)
+    return url.replace(/https?:\/\/server\.stream-lineai\.com\/uploads\//, `${SERVER_BASE}/uploads/`)
   }
   if (url.startsWith('http')) return url
   return `${MEDIA_BASE}${url.startsWith('/') ? '' : '/'}${url}`
