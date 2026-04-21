@@ -1733,10 +1733,23 @@ class InquiryCheckoutRequest(BaseModel):
 
 
 @router.post('/storefront/checkout/inquiry')
-async def create_checkout_inquiry(req: InquiryCheckoutRequest, db: Session = Depends(get_db)):
+async def create_checkout_inquiry(
+    req: InquiryCheckoutRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
     """Non-payment checkout: record inquiry and notify admin via Discord."""
     if not req.items:
         raise HTTPException(status_code=400, detail='No items in cart')
+
+    # Decode auth token to get customer_id (if logged in)
+    from app.routers.auth_router import decode_token
+    customer_id: Optional[int] = None
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        payload = decode_token(auth_header[7:])
+        if payload:
+            customer_id = payload.get('customer_id')
 
     # Look up product details
     ids = [item.product_id for item in req.items]
@@ -1750,6 +1763,8 @@ async def create_checkout_inquiry(req: InquiryCheckoutRequest, db: Session = Dep
 
     lines = []
     order_total = 0.0
+    inquiry_id = f'inquiry-{uuid.uuid4().hex[:12]}'  # one ID for the whole cart
+
     for item in req.items:
         row = by_id.get(item.product_id)
         if not row:
@@ -1760,23 +1775,8 @@ async def create_checkout_inquiry(req: InquiryCheckoutRequest, db: Session = Dep
         subtotal = price * item.qty
         order_total += subtotal
         lines.append(f'  • {item.qty}x {name} — ${subtotal:.2f}' if price else f'  • {item.qty}x {name}')
-        # Save as inquiry order
-        db.execute(text("""
-            INSERT INTO orders (external_order_id, customer_email, customer_name, coin_id,
-                                product_name, qty, sold_price, channel, status, notes)
-            VALUES (:eid, :email, :name, :coin_id, :pname, :qty, :price, 'inquiry', 'inquiry', :notes)
-        """), {
-            'eid': f'inquiry-{uuid.uuid4().hex[:12]}',
-            'email': req.email,
-            'name': req.name,
-            'coin_id': row.id,
-            'pname': name,
-            'qty': item.qty,
-            'price': price if price else None,
-            'notes': req.note or None,
-        })
-    db.commit()
 
+    # Send Discord notification first — always fires regardless of DB outcome
     cart_str = '\n'.join(lines) if lines else '  (no items matched)'
     contact_str = req.name
     if req.email:
@@ -1791,6 +1791,35 @@ async def create_checkout_inquiry(req: InquiryCheckoutRequest, db: Session = Dep
         f'**Total: ${order_total:.2f}**'
         + (f'\nNote: {req.note}' if req.note else '')
     )
+
+    # Save to DB — all items share the same inquiry_id so they group together
+    try:
+        ensure_orders_table(db)
+        for item in req.items:
+            row = by_id.get(item.product_id)
+            if not row:
+                continue
+            meta = parse_json(row.shopify_metadata, {})
+            name = meta.get('storefront', {}).get('name') or row.title
+            price = float(row.computed_price or 0)
+            db.execute(text("""
+                INSERT INTO orders (external_order_id, customer_id, customer_email, customer_name,
+                                    coin_id, product_name, qty, sold_price, channel, status, notes)
+                VALUES (:eid, :cid, :email, :name, :coin_id, :pname, :qty, :price, 'inquiry', 'inquiry', :notes)
+            """), {
+                'eid': inquiry_id,
+                'cid': customer_id,
+                'email': req.email,
+                'name': req.name,
+                'coin_id': row.id,
+                'pname': name,
+                'qty': item.qty,
+                'price': price if price else None,
+                'notes': req.note or None,
+            })
+        db.commit()
+    except Exception:
+        pass  # Discord already notified; don't fail the request over a DB issue
 
     return {'ok': True}
 

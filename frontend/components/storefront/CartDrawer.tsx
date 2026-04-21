@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useCart } from '../../lib/cart'
-import { isAdmin as checkAdmin } from '../../lib/auth'
+import { isAdmin as checkAdmin, getAuth, authHeaders } from '../../lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1270/api/v1'
 const FRONTEND_BASE = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:8100'
@@ -17,18 +17,21 @@ export default function CartDrawer({ open, onClose }: Props) {
   const [discounts, setDiscounts]     = useState<DiscountTier[]>([])
   const [inquiryMode, setInquiryMode] = useState(false)
   const [admin, setAdmin]             = useState(false)
+  const [authUser, setAuthUser]       = useState<ReturnType<typeof getAuth>>(null)
   const loadedRef = useRef(false)
 
   // Inquiry form state
-  const [inquiryName,  setInquiryName]  = useState('')
-  const [inquiryEmail, setInquiryEmail] = useState('')
   const [inquiryPhone, setInquiryPhone] = useState('')
   const [inquiryNote,  setInquiryNote]  = useState('')
   const [inquirySent,  setInquirySent]  = useState(false)
   const [inquiryError, setInquiryError] = useState('')
   const [submitting,   setSubmitting]   = useState(false)
 
-  useEffect(() => { setAdmin(checkAdmin()) }, [])
+  useEffect(() => {
+    const a = getAuth()
+    setAdmin(checkAdmin())
+    setAuthUser(a)
+  }, [])
 
   useEffect(() => {
     if (loadedRef.current) return
@@ -54,8 +57,8 @@ export default function CartDrawer({ open, onClose }: Props) {
   }, [open])
 
   async function handleInquiry() {
-    if (!inquiryName.trim() || !inquiryEmail.trim()) {
-      setInquiryError('Please enter your name and email.')
+    if (!authUser?.name || !authUser?.email) {
+      setInquiryError('Could not read your account info. Please sign in again.')
       return
     }
     setSubmitting(true)
@@ -63,11 +66,11 @@ export default function CartDrawer({ open, onClose }: Props) {
     try {
       const res = await fetch(`${API}/storefront/checkout/inquiry`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
           items: items.map(i => ({ product_id: i.productId, qty: i.qty })),
-          name: inquiryName.trim(),
-          email: inquiryEmail.trim(),
+          name: authUser.name,
+          email: authUser.email,
           phone: inquiryPhone.trim() || null,
           note: inquiryNote.trim() || null,
         }),
@@ -221,41 +224,58 @@ export default function CartDrawer({ open, onClose }: Props) {
               </div>
             ) : inquiryMode && !admin ? (
               <>
-                {/* Inquiry form */}
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-stone-500">Subtotal ({count} item{count !== 1 ? 's' : ''})</span>
                   <span className="text-xl font-bold text-stone-900">${total.toFixed(2)}</span>
                 </div>
-                <p className="text-xs text-stone-400 -mt-2">Leave your details and we&apos;ll be in touch to complete the order.</p>
-                <div className="space-y-2">
-                  <input
-                    type="text" placeholder="Your name *" value={inquiryName}
-                    onChange={e => setInquiryName(e.target.value)}
-                    className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
-                  />
-                  <input
-                    type="email" placeholder="Email address *" value={inquiryEmail}
-                    onChange={e => setInquiryEmail(e.target.value)}
-                    className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
-                  />
-                  <input
-                    type="tel" placeholder="Phone (optional)" value={inquiryPhone}
-                    onChange={e => setInquiryPhone(e.target.value)}
-                    className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
-                  />
-                  <textarea
-                    placeholder="Any notes? (optional)" value={inquiryNote}
-                    onChange={e => setInquiryNote(e.target.value)} rows={2}
-                    className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400 resize-none"
-                  />
-                </div>
-                {inquiryError && <p className="text-xs text-red-500">{inquiryError}</p>}
-                <button
-                  onClick={handleInquiry} disabled={submitting}
-                  className="w-full rounded-full bg-amber-500 py-3.5 text-sm font-bold text-white hover:bg-amber-600 active:bg-amber-700 transition-colors shadow-md disabled:opacity-60"
-                >
-                  {submitting ? 'Sending…' : 'Send Order Request →'}
-                </button>
+
+                {!authUser ? (
+                  /* Not logged in — require account */
+                  <div className="rounded-xl border border-stone-200 bg-stone-50 px-4 py-5 text-center space-y-3">
+                    <p className="text-sm font-semibold text-stone-800">Sign in to place your order</p>
+                    <p className="text-xs text-stone-400">Create a free account so we can save your order and get back to you.</p>
+                    <div className="flex gap-2">
+                      <a href="/account/login" className="flex-1 rounded-full border border-stone-300 py-2.5 text-sm font-medium text-stone-700 hover:bg-stone-100 transition-colors text-center no-underline">
+                        Sign in
+                      </a>
+                      <a href="/account/register" className="flex-1 rounded-full bg-amber-500 py-2.5 text-sm font-bold text-white hover:bg-amber-600 transition-colors text-center no-underline">
+                        Create account
+                      </a>
+                    </div>
+                  </div>
+                ) : (
+                  /* Logged in — show form with pre-filled account info */
+                  <>
+                    <div className="rounded-xl border border-stone-100 bg-stone-50 px-4 py-3 flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-stone-800 truncate">{authUser.name}</p>
+                        <p className="text-xs text-stone-400 truncate">{authUser.email}</p>
+                      </div>
+                      <a href="/account/login" className="text-xs text-stone-400 hover:text-stone-600 whitespace-nowrap">Not you?</a>
+                    </div>
+                    <p className="text-xs text-stone-400 -mt-2">We&apos;ll contact you to arrange payment and shipping.</p>
+                    <div className="space-y-2">
+                      <input
+                        type="tel" placeholder="Phone (optional)" value={inquiryPhone}
+                        onChange={e => setInquiryPhone(e.target.value)}
+                        className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                      />
+                      <textarea
+                        placeholder="Any notes? (optional)" value={inquiryNote}
+                        onChange={e => setInquiryNote(e.target.value)} rows={2}
+                        className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400 resize-none"
+                      />
+                    </div>
+                    {inquiryError && <p className="text-xs text-red-500">{inquiryError}</p>}
+                    <button
+                      onClick={handleInquiry} disabled={submitting}
+                      className="w-full rounded-full bg-amber-500 py-3.5 text-sm font-bold text-white hover:bg-amber-600 active:bg-amber-700 transition-colors shadow-md disabled:opacity-60"
+                    >
+                      {submitting ? 'Sending…' : 'Place Order Request →'}
+                    </button>
+                  </>
+                )}
+
                 <button onClick={clearCart} className="w-full text-center text-xs text-stone-400 hover:text-red-400 transition-colors">
                   Clear cart
                 </button>
