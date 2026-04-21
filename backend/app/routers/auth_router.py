@@ -16,19 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-
-
-def _discord_notify(content: str) -> None:
-    url = os.getenv('DISCORD_WEBHOOK_URL', '')
-    if not url:
-        return
-    try:
-        body = json.dumps({'content': content}).encode()
-        req = urllib.request.Request(url, data=body, headers={'Content-Type': 'application/json'}, method='POST')
-        with urllib.request.urlopen(req, timeout=5):
-            pass
-    except Exception:
-        pass
+from app.notifications import notify as _discord_notify
 
 router = APIRouter()
 
@@ -74,10 +62,31 @@ def ensure_customers_table(db: Session):
             email VARCHAR(255) UNIQUE NOT NULL,
             name VARCHAR(255),
             password_hash TEXT NOT NULL,
+            phone VARCHAR(50),
+            address_line1 VARCHAR(255),
+            address_line2 VARCHAR(255),
+            city VARCHAR(100),
+            state_province VARCHAR(100),
+            zip_code VARCHAR(20),
+            country VARCHAR(100) DEFAULT 'United States',
             created_at TIMESTAMPTZ DEFAULT NOW(),
             updated_at TIMESTAMPTZ DEFAULT NOW()
         )
     """))
+    # Add columns to existing tables (safe to run repeatedly)
+    for col, definition in [
+        ('phone',          'VARCHAR(50)'),
+        ('address_line1',  'VARCHAR(255)'),
+        ('address_line2',  'VARCHAR(255)'),
+        ('city',           'VARCHAR(100)'),
+        ('state_province', 'VARCHAR(100)'),
+        ('zip_code',       'VARCHAR(20)'),
+        ('country',        "VARCHAR(100) DEFAULT 'United States'"),
+    ]:
+        try:
+            db.execute(text(f"ALTER TABLE customers ADD COLUMN IF NOT EXISTS {col} {definition}"))
+        except Exception:
+            pass
     db.commit()
 
 
@@ -99,6 +108,13 @@ class CustomerRegisterRequest(BaseModel):
     email: str
     name: str
     password: str
+    phone: Optional[str] = None
+    address_line1: Optional[str] = None
+    address_line2: Optional[str] = None
+    city: Optional[str] = None
+    state_province: Optional[str] = None
+    zip_code: Optional[str] = None
+    country: Optional[str] = 'United States'
 
 
 class CustomerLoginRequest(BaseModel):
@@ -237,8 +253,24 @@ async def customer_register(req: CustomerRegisterRequest, db: Session = Depends(
 
     pw_hash = hash_password(req.password)
     row = db.execute(
-        text('INSERT INTO customers (email, name, password_hash) VALUES (:email, :name, :pw) RETURNING id'),
-        {'email': req.email.lower().strip(), 'name': req.name.strip(), 'pw': pw_hash}
+        text("""
+            INSERT INTO customers (email, name, password_hash, phone,
+                                   address_line1, address_line2, city, state_province, zip_code, country)
+            VALUES (:email, :name, :pw, :phone, :addr1, :addr2, :city, :state, :zip, :country)
+            RETURNING id
+        """),
+        {
+            'email': req.email.lower().strip(),
+            'name': req.name.strip(),
+            'pw': pw_hash,
+            'phone': req.phone or None,
+            'addr1': req.address_line1 or None,
+            'addr2': req.address_line2 or None,
+            'city': req.city or None,
+            'state': req.state_province or None,
+            'zip': req.zip_code or None,
+            'country': req.country or 'United States',
+        }
     ).fetchone()
     db.commit()
 
@@ -277,19 +309,22 @@ async def customer_me(db: Session = Depends(get_db), authorization: str = ''):
 
 @router.get('/auth/customer/orders/{customer_id}')
 async def customer_orders(customer_id: int, db: Session = Depends(get_db)):
-    """Return orders for a customer (from Stripe webhook data stored in orders table)."""
+    """Return all orders (stripe + inquiry) for a specific customer."""
     ensure_customers_table(db)
-    rows = db.execute(
-        text("""
-            SELECT o.id, o.external_order_id, o.qty, o.sold_price, o.created_at,
-                   c.title as product_name
-            FROM orders o
-            LEFT JOIN coins c ON c.id = o.coin_id
-            WHERE o.channel = 'stripe'
-            ORDER BY o.created_at DESC
-            LIMIT 50
-        """)
-    ).fetchall()
+    try:
+        rows = db.execute(
+            text("""
+                SELECT o.id, o.external_order_id, o.product_name, o.qty, o.sold_price,
+                       o.channel, o.status, o.created_at
+                FROM orders o
+                WHERE o.customer_id = :cid
+                ORDER BY o.created_at DESC
+                LIMIT 100
+            """),
+            {'cid': customer_id}
+        ).fetchall()
+    except Exception:
+        rows = []
     return {
         'orders': [
             {
@@ -298,6 +333,8 @@ async def customer_orders(customer_id: int, db: Session = Depends(get_db)):
                 'product': r.product_name,
                 'qty': r.qty,
                 'total': float(r.sold_price) if r.sold_price is not None else None,
+                'channel': r.channel,
+                'status': r.status,
                 'date': r.created_at.isoformat() if r.created_at else None,
             }
             for r in rows

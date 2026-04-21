@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
 import PublicLayout from '../../components/storefront/PublicLayout'
-import { getAuth, clearAuth } from '../../lib/auth'
+import { getAuth, clearAuth, AuthUser } from '../../lib/auth'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1270/api/v1'
 
@@ -11,22 +11,38 @@ interface Order {
   order_id: string
   product: string
   qty: number
-  total: number
+  total: number | null
+  channel: string
+  status: string
   date: string
+}
+
+const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  paid:      { label: 'Paid',      color: 'text-green-700 bg-green-50 border-green-200' },
+  inquiry:   { label: 'Pending',   color: 'text-amber-700 bg-amber-50 border-amber-200' },
+  shipped:   { label: 'Shipped',   color: 'text-blue-700 bg-blue-50 border-blue-200' },
+  delivered: { label: 'Delivered', color: 'text-green-700 bg-green-50 border-green-200' },
+  cancelled: { label: 'Cancelled', color: 'text-red-700 bg-red-50 border-red-200' },
+  refunded:  { label: 'Refunded',  color: 'text-stone-600 bg-stone-50 border-stone-200' },
 }
 
 export default function AccountPage() {
   const router = useRouter()
-  const auth = typeof window !== 'undefined' ? getAuth() : null
+  // Use state + useEffect to avoid SSR/client hydration mismatch with localStorage
+  const [auth, setAuth] = useState<AuthUser | null>(null)
+  const [mounted, setMounted] = useState(false)
   const [orders, setOrders] = useState<Order[]>([])
   const [loadingOrders, setLoadingOrders] = useState(false)
 
   useEffect(() => {
-    if (!auth) { router.replace('/account/login'); return }
-    if (auth.customerId) {
+    const a = getAuth()
+    setAuth(a)
+    setMounted(true)
+    if (!a) { router.replace('/account/login'); return }
+    if (a.customerId) {
       setLoadingOrders(true)
-      fetch(`${API}/auth/customer/orders/${auth.customerId}`, {
-        headers: { Authorization: `Bearer ${auth.token}` },
+      fetch(`${API}/auth/customer/orders/${a.customerId}`, {
+        headers: { Authorization: `Bearer ${a.token}` },
       })
         .then(r => r.json())
         .then(d => setOrders(d.orders || []))
@@ -40,7 +56,7 @@ export default function AccountPage() {
     router.push('/shop')
   }
 
-  if (!auth) return null
+  if (!mounted) return null
 
   return (
     <PublicLayout title="My Account — Miracle Coins">
@@ -48,7 +64,7 @@ export default function AccountPage() {
         <div className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-stone-900">My Account</h1>
-            <p className="mt-1 text-sm text-stone-500">{auth.email}</p>
+            <p className="mt-1 text-sm text-stone-500">{auth?.email}</p>
           </div>
           <button
             onClick={handleLogout}
@@ -60,7 +76,7 @@ export default function AccountPage() {
 
         {/* Welcome card */}
         <div className="mb-8 rounded-2xl border border-amber-100 bg-amber-50 px-6 py-5">
-          <p className="font-medium text-amber-800">Welcome back{auth.name ? `, ${auth.name}` : ''}!</p>
+          <p className="font-medium text-amber-800">Welcome back{auth?.name ? `, ${auth.name}` : ''}!</p>
           <p className="mt-1 text-sm text-amber-700">Browse your order history below or continue shopping.</p>
           <Link
             href="/shop"
@@ -81,29 +97,56 @@ export default function AccountPage() {
               <Link href="/shop" className="text-amber-600 hover:underline">Start shopping →</Link>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
-              <table className="w-full text-sm">
-                <thead className="border-b border-stone-100 bg-stone-50 text-xs uppercase tracking-wider text-stone-400">
-                  <tr>
-                    <th className="px-5 py-3 text-left">Product</th>
-                    <th className="px-5 py-3 text-left">Qty</th>
-                    <th className="px-5 py-3 text-left">Total</th>
-                    <th className="px-5 py-3 text-left">Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-100">
-                  {orders.map(order => (
-                    <tr key={order.id}>
-                      <td className="px-5 py-3 text-stone-800">{order.product || '—'}</td>
-                      <td className="px-5 py-3 text-stone-600">{order.qty}</td>
-                      <td className="px-5 py-3 font-medium text-stone-900">${order.total.toFixed(2)}</td>
-                      <td className="px-5 py-3 text-stone-400">
-                        {order.date ? new Date(order.date).toLocaleDateString() : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-3">
+              {/* Group by order_id */}
+              {Object.entries(
+                orders.reduce((acc, o) => {
+                  const key = o.order_id || String(o.id)
+                  if (!acc[key]) acc[key] = []
+                  acc[key].push(o)
+                  return acc
+                }, {} as Record<string, Order[]>)
+              ).map(([orderId, items]) => {
+                const first = items[0]
+                const orderTotal = items.reduce((s, i) => s + (i.total || 0), 0)
+                const statusInfo = STATUS_LABELS[first.status] || { label: first.status, color: 'text-stone-600 bg-stone-50 border-stone-200' }
+                return (
+                  <div key={orderId} className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
+                    <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50 px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-stone-400 font-mono">{orderId}</span>
+                        <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${statusInfo.color}`}>
+                          {statusInfo.label}
+                        </span>
+                        {first.channel === 'inquiry' && (
+                          <span className="rounded-full border border-stone-200 bg-white px-2.5 py-0.5 text-xs text-stone-500">Order request</span>
+                        )}
+                      </div>
+                      <span className="text-xs text-stone-400">
+                        {first.date ? new Date(first.date).toLocaleDateString() : '—'}
+                      </span>
+                    </div>
+                    <div className="divide-y divide-stone-100">
+                      {items.map(item => (
+                        <div key={item.id} className="flex items-center justify-between px-5 py-3">
+                          <div>
+                            <p className="text-sm font-medium text-stone-800">{item.product || '—'}</p>
+                            <p className="text-xs text-stone-400">Qty: {item.qty}</p>
+                          </div>
+                          <span className="text-sm font-semibold text-stone-900">
+                            {item.total != null ? `$${item.total.toFixed(2)}` : '—'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {items.length > 1 && (
+                      <div className="flex justify-end border-t border-stone-100 px-5 py-2">
+                        <span className="text-sm font-bold text-stone-900">Total: ${orderTotal.toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

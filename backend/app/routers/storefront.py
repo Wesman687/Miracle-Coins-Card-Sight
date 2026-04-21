@@ -21,27 +21,12 @@ from sqlalchemy.orm import Session
 
 from app.auth_utils import verify_admin_token
 from app.database import get_db
+from app.notifications import notify as _discord_notify
 
 router = APIRouter()
 
 LISTS_DIR = Path(os.getenv('BOOTSTRAP_LISTS_DIR', 'data/lists'))
 
-# ---------------------------------------------------------------------------
-# Discord notification utility
-# ---------------------------------------------------------------------------
-
-def _discord_notify(content: str) -> None:
-    """Fire-and-forget Discord webhook. Never raises."""
-    url = os.getenv('DISCORD_WEBHOOK_URL', '')
-    if not url:
-        return
-    try:
-        body = json.dumps({'content': content}).encode()
-        req = urllib.request.Request(url, data=body, headers={'Content-Type': 'application/json'}, method='POST')
-        with urllib.request.urlopen(req, timeout=5):
-            pass
-    except Exception:
-        pass
 
 
 # ---------------------------------------------------------------------------
