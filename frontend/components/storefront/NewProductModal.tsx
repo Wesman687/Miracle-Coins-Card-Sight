@@ -53,6 +53,7 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
   // eBay listing option
   const [listOnEbay, setListOnEbay] = useState(false)
   const [ebayStatus, setEbayStatus] = useState<string | null>(null)
+  const [offerPrice, setOfferPrice] = useState('')
 
   // AI description
   const [generatingDesc, setGeneratingDesc] = useState(false)
@@ -172,6 +173,7 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
             body: JSON.stringify({
               price: price ? parseFloat(price) : undefined,
               quantity: parseInt(ebayQuantity) || 1,
+              offer_price: offerPrice ? parseFloat(offerPrice) : undefined,
             }),
           })
           if (!ebayRes.ok) {
@@ -434,15 +436,28 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
                 </div>
               </label>
               {listOnEbay && (
-                <div className="px-4 pb-3 border-t border-stone-200 pt-3">
-                  <label className="mb-1.5 block text-xs font-medium text-stone-600">eBay Quantity</label>
-                  <input
-                    type="number" min="1"
-                    value={ebayQuantity}
-                    onChange={e => setEbayQuantity(e.target.value)}
-                    className="w-32 rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:border-amber-400 focus:outline-none"
-                  />
-                  <p className="mt-1 text-xs text-stone-400">Separate from website stock — how many to list on eBay</p>
+                <div className="px-4 pb-3 border-t border-stone-200 pt-3 space-y-3">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-stone-600">eBay Quantity</label>
+                    <input
+                      type="number" min="1"
+                      value={ebayQuantity}
+                      onChange={e => setEbayQuantity(e.target.value)}
+                      className="w-32 rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:border-amber-400 focus:outline-none"
+                    />
+                    <p className="mt-1 text-xs text-stone-400">Separate from website stock — how many to list on eBay</p>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-stone-600">Best Offer Auto-Accept Price ($) <span className="text-stone-400 font-normal">optional</span></label>
+                    <input
+                      type="number" min="0" step="0.01"
+                      value={offerPrice}
+                      onChange={e => setOfferPrice(e.target.value)}
+                      placeholder="e.g. 12.00"
+                      className="w-40 rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:border-amber-400 focus:outline-none"
+                    />
+                    <p className="mt-1 text-xs text-stone-400">eBay will auto-accept offers at or above this price</p>
+                  </div>
                 </div>
               )}
             </div>

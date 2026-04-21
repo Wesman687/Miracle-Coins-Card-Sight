@@ -59,10 +59,23 @@ export default function ShopPage() {
     }
   }
 
-  const kits = useMemo(() => products.filter((p) => p.productType === 'bundle'), [products])
-  const cards = useMemo(() => products.filter((p) => p.productType !== 'bundle'), [products])
+  const [search, setSearch] = useState('')
 
-  const displayed = kitsOnly ? kits : products
+  const filtered = useMemo(() => {
+    if (!search.trim()) return products
+    const q = search.toLowerCase()
+    return products.filter(p =>
+      p.name?.toLowerCase().includes(q) ||
+      p.metal?.toLowerCase().includes(q) ||
+      p.description?.toLowerCase().includes(q) ||
+      p.weightLabel?.toLowerCase().includes(q)
+    )
+  }, [products, search])
+
+  const kits = useMemo(() => filtered.filter((p) => p.productType === 'bundle'), [filtered])
+  const cards = useMemo(() => filtered.filter((p) => p.productType !== 'bundle'), [filtered])
+
+  const displayed = kitsOnly ? kits : filtered
 
   let pageTitle = 'All Products'
   if (kitsOnly) pageTitle = 'Kits & Sets'
@@ -77,19 +90,43 @@ export default function ShopPage() {
   return (
     <PublicLayout title={`${pageTitle} — Miracle Coins`} description="Real precious metal collectible cards and kits.">
       <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-stone-900">{pageTitle}</h1>
-            <p className="mt-1 text-sm text-stone-400">{subtitle}</p>
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-3xl font-bold text-stone-900">{pageTitle}</h1>
+              <p className="mt-1 text-sm text-stone-400">{subtitle}</p>
+            </div>
+            {admin && (
+              <a
+                href="/manage"
+                className="rounded-full border border-amber-400 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 no-underline hover:bg-amber-100 transition-colors"
+              >
+                Manage catalog →
+              </a>
+            )}
           </div>
-          {admin && (
-            <a
-              href="/manage"
-              className="rounded-full border border-amber-400 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 no-underline hover:bg-amber-100 transition-colors"
-            >
-              Manage catalog →
-            </a>
-          )}
+          <div className="relative max-w-sm">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" />
+            </svg>
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search cards, metals…"
+              className="w-full rounded-full border border-stone-200 bg-white pl-9 pr-4 py-2.5 text-sm text-stone-800 placeholder-stone-400 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400 shadow-sm"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
 
         {loading ? (
@@ -147,7 +184,9 @@ export default function ShopPage() {
             )}
 
             {displayed.length === 0 && (
-              <div className="py-24 text-center text-stone-400">No products found.</div>
+              <div className="py-24 text-center text-stone-400">
+                {search ? `No products matching "${search}".` : 'No products found.'}
+              </div>
             )}
           </>
         )}

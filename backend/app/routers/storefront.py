@@ -476,6 +476,18 @@ def build_ebay_listing_payload(coin_row: Any, image_urls: List[str], overrides: 
         listing_description += f"\n\nMetal content: {storefront.get('weightLabel')}"
     if storefront.get('features'):
         listing_description += "\n\nHighlights:\n- " + "\n- ".join(storefront.get('features'))
+    # Normalize image URLs for eBay — must be publicly accessible
+    public_base = os.getenv('LOCAL_API_URL', 'http://localhost:1270')
+    def _normalize_image_url(u: str) -> str:
+        # Fix old URLs missing the /miracle-coins prefix
+        import re
+        u = re.sub(r'https?://server\.stream-lineai\.com/uploads/', f'{public_base}/uploads/', u)
+        # Resolve relative paths
+        if u.startswith('/'):
+            u = f'{public_base}{u}'
+        return u
+    ebay_images = [_normalize_image_url(u) for u in image_urls[:12] if u]
+
     return {
         'sku': sku,
         'title': title[:80],
@@ -485,7 +497,7 @@ def build_ebay_listing_payload(coin_row: Any, image_urls: List[str], overrides: 
         'category_id': str(category_id),
         'marketplace_id': (overrides or {}).get('marketplace_id') or 'EBAY_US',
         'condition': 'NEW',
-        'images': image_urls[:12],
+        'images': ebay_images,
         'existing_offer_id': ebay.get('offerId'),
         'existing_item_id': ebay.get('itemId'),
         'existing_url': ebay.get('url'),
@@ -942,8 +954,6 @@ async def get_catalog(
         if featured_only and not product.get('featured'):
             continue
         if product.get('hidden'):
-            continue
-        if not listing:
             continue
         if not product.get('image'):
             continue
