@@ -7,14 +7,10 @@ const SERVER_BASE = 'https://server.stream-lineai.com/miracle-coins'
 
 export function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null
-  // Localhost upload URLs → always serve from production server
-  if (url.includes('localhost') && url.includes('/uploads/')) {
+  // Any URL containing /uploads/ → always serve from production server
+  if (url.includes('/uploads/')) {
     const path = url.split('/uploads/').pop()
     return `${SERVER_BASE}/uploads/${path}`
-  }
-  // Fix server URLs missing the /miracle-coins/ prefix
-  if (url.match(/https?:\/\/server\.stream-lineai\.com\/uploads\//)) {
-    return url.replace(/https?:\/\/server\.stream-lineai\.com\/uploads\//, `${SERVER_BASE}/uploads/`)
   }
   if (url.startsWith('http')) return url
   return `${MEDIA_BASE}${url.startsWith('/') ? '' : '/'}${url}`
