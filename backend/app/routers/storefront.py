@@ -678,6 +678,23 @@ class CreateProductRequest(BaseModel):
     tags: Optional[List[str]] = None
 
 
+@router.get('/storefront/proxy-image')
+async def proxy_image(
+    url: str = Query(...),
+    _: str = Depends(verify_admin_token),
+):
+    """Proxy an image URL through the backend so the frontend can load cross-origin images into canvas."""
+    from fastapi.responses import Response as FastAPIResponse
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'MiracleCoinsBot/1.0'})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = resp.read()
+            ct = resp.headers.get('Content-Type', 'image/jpeg')
+        return FastAPIResponse(content=data, media_type=ct, headers={'Cache-Control': 'public, max-age=3600'})
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f'Could not fetch image: {exc}')
+
+
 @router.post('/storefront/upload-image')
 async def upload_product_image(
     file: UploadFile = File(...),
@@ -1536,9 +1553,12 @@ async def suggest_tags(
 
     system = (
         "You generate short, searchable tags for collectible precious metal card products. "
-        "Tags describe the DESIGN THEME visible on the card — things like 'eagle', 'flag', 'animals', "
-        "'patriotic', 'vintage', 'wildlife', 'western', 'military', 'floral', 'dragon', etc. "
-        "Also include metal type and format tags where relevant. "
+        "The product TITLE is your PRIMARY source — extract keywords and themes directly from the title words. "
+        "For example: title 'No Kings' → tags like 'no kings', 'revolution', 'freedom', 'anti-monarchy', 'political'. "
+        "Title 'American Eagle' → 'eagle', 'patriotic', 'american'. "
+        "Title 'Wolf Pack' → 'wolf', 'wildlife', 'animals'. "
+        "Do NOT invent generic precious-metal or military tags that aren't implied by the title. "
+        "Also include the metal type as a tag. "
         "Return ONLY a JSON array of 5-10 lowercase single-word or short-phrase tags. No explanation."
     )
 
