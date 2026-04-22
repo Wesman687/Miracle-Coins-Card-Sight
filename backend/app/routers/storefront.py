@@ -447,10 +447,16 @@ def get_ebay_sell_access_token() -> str:
 
 def infer_ebay_category_id(storefront: Dict[str, Any]) -> str:
     metal = storefront.get('metal', '')
-    # Confirmed eBay US leaf category IDs for precious metal bullion:
-    # Gold: 39486, Silver: 39484, Palladium: 39492
-    # Platinum 39491 is a PARENT — leaf sub-categories vary; use 39487 (Platinum Bars & Rounds)
-    return {'gold': '39486', 'platinum': '39487', 'silver': '39484', 'palladium': '39492'}.get(metal, '39486')
+    # Confirmed eBay US leaf category IDs (verified via taxonomy API):
+    # 3360 = Other Gold Bullion, 3361 = Other Silver Bullion
+    # 34942 = Other Platinum Bullion, 166679 = Other Bullion (catch-all)
+    return {
+        'gold': '3360',
+        'silver': '3361',
+        'platinum': '34942',
+        'palladium': '166679',
+        'copper': '166679',
+    }.get(metal, '166679')
 
 
 def build_ebay_listing_payload(coin_row: Any, image_urls: List[str], overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -639,8 +645,16 @@ def publish_coin_to_ebay(coin_row: Any, image_urls: List[str], overrides: Option
         # If the category is not a leaf, query eBay taxonomy for a suggestion and retry once
         if 'not a leaf category' in str(exc.detail).lower() or 'invalid category' in str(exc.detail).lower():
             try:
+                import base64 as _b64
+                _env = load_ebay_publish_env()
+                _creds = _b64.b64encode(f"{_env.get('EBAY_APP_ID','')}:{_env.get('EBAY_CERT_ID','')}".encode()).decode()
+                _tok_req = urllib.request.Request('https://api.ebay.com/identity/v1/oauth2/token', method='POST',
+                    headers={'Authorization': f'Basic {_creds}', 'Content-Type': 'application/x-www-form-urlencoded'})
+                _tok_req.data = b'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope'
+                with urllib.request.urlopen(_tok_req, timeout=10) as _r:
+                    _app_token = json.loads(_r.read().decode())['access_token']
                 tax_url = f"https://api.ebay.com/commerce/taxonomy/v1/category_tree/0/get_category_suggestions?q={urllib.parse.quote(payload['title'])}"
-                tax_req = urllib.request.Request(tax_url, headers={'Authorization': f'Bearer {token}', 'Accept': 'application/json'})
+                tax_req = urllib.request.Request(tax_url, headers={'Authorization': f'Bearer {_app_token}', 'Accept': 'application/json'})
                 with urllib.request.urlopen(tax_req, timeout=10) as r:
                     suggestions = json.loads(r.read().decode()).get('categorySuggestions', [])
                 if suggestions:
