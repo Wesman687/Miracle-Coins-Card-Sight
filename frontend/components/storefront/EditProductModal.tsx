@@ -21,6 +21,8 @@ interface Product {
   quantity: number | null
   ebayQuantity?: number | null
   offerPrice?: number | null
+  tags?: string[]
+  description?: string
 }
 
 interface Props {
@@ -75,9 +77,47 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
   const [rawSrc, setRawSrc] = useState<string | null>(null)
   const [newImageUrl, setNewImageUrl] = useState<string | null>(null)
 
+  const [tags, setTags] = useState<string[]>(product.tags || [])
+  const [tagInput, setTagInput] = useState('')
+  const [suggestingTags, setSuggestingTags] = useState(false)
+
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  function addTag(raw: string) {
+    const t = raw.trim().toLowerCase()
+    if (t && !tags.includes(t)) setTags(prev => [...prev, t])
+    setTagInput('')
+  }
+
+  async function suggestTags() {
+    setSuggestingTags(true)
+    try {
+      const res = await fetch(`${API}/storefront/suggest-tags`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({
+          title: title.trim(),
+          metal: selectedMetals[0],
+          product_type: productType,
+          description: product.description || '',
+          existing_tags: tags,
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setTags(prev => {
+          const merged = [...prev]
+          for (const t of (data.tags || [])) {
+            if (!merged.includes(t)) merged.push(t)
+          }
+          return merged
+        })
+      }
+    } catch {}
+    setSuggestingTags(false)
+  }
 
   async function handleDelete() {
     if (!confirm(`Delete "${product.name}"? This cannot be undone.`)) return
@@ -178,6 +218,7 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
           quantity: unlimited ? 0 : (parseInt(quantity) || 1),
           ebay_quantity: parseInt(ebayQuantity) || 1,
           offer_price: effectiveOfferPrice,
+          tags,
         }),
       })
       if (!res.ok) throw new Error(`Save failed (${res.status})`)
@@ -449,6 +490,50 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
                   className="w-full rounded-xl border border-stone-200 px-4 py-2.5 text-sm text-stone-900 placeholder-stone-400 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400 disabled:bg-stone-50 disabled:text-stone-400"
                 />
               </div>
+            </div>
+
+            {/* Tags */}
+            <div>
+              <div className="mb-1.5 flex items-center justify-between">
+                <label className="text-sm font-medium text-stone-700">Tags</label>
+                <button
+                  type="button"
+                  onClick={suggestTags}
+                  disabled={suggestingTags}
+                  className="flex items-center gap-1.5 rounded-full border border-stone-200 px-3 py-1 text-xs text-stone-500 hover:border-amber-400 hover:text-amber-600 disabled:opacity-50 transition-colors"
+                >
+                  {suggestingTags ? (
+                    <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                  ) : (
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                  )}
+                  {suggestingTags ? 'Suggesting…' : 'AI suggest'}
+                </button>
+              </div>
+              {tags.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {tags.map(t => (
+                    <span key={t} className="flex items-center gap-1 rounded-full bg-stone-100 pl-2.5 pr-1.5 py-0.5 text-xs text-stone-600">
+                      {t}
+                      <button type="button" onClick={() => setTags(prev => prev.filter(x => x !== t))} className="text-stone-400 hover:text-red-400 transition-colors">
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <input
+                type="text"
+                value={tagInput}
+                onChange={e => setTagInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagInput) }
+                }}
+                onBlur={() => tagInput.trim() && addTag(tagInput)}
+                placeholder="Type a tag and press Enter (e.g. eagle, flag, animals)"
+                className="w-full rounded-xl border border-stone-200 px-4 py-2 text-sm text-stone-900 placeholder-stone-300 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
+              />
+              <p className="mt-1 text-xs text-stone-400">Used for filtering on the shop page</p>
             </div>
 
             {/* Error */}

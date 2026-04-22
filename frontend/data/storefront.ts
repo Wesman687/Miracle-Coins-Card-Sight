@@ -27,6 +27,7 @@ export interface StoreProduct {
   quantity?: number
   productType?: string
   metals?: string[]
+  tags?: string[]
 }
 
 export const categories = [

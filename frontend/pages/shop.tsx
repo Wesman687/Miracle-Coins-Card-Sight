@@ -60,6 +60,7 @@ export default function ShopPage() {
   }
 
   const [search, setSearch] = useState('')
+  const [activeTag, setActiveTag] = useState<string | null>(null)
   const [testMode, setTestMode] = useState(false)
 
   useEffect(() => {
@@ -70,16 +71,26 @@ export default function ShopPage() {
       .catch(() => {})
   }, [])
 
+  // All unique tags across all products, sorted by frequency
+  const allTags = useMemo(() => {
+    const freq: Record<string, number> = {}
+    products.forEach(p => (p.tags || []).forEach(t => { freq[t] = (freq[t] || 0) + 1 }))
+    return Object.entries(freq).sort((a, b) => b[1] - a[1]).map(([t]) => t)
+  }, [products])
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return products
+    let list = products
+    if (activeTag) list = list.filter(p => (p.tags || []).includes(activeTag))
+    if (!search.trim()) return list
     const q = search.toLowerCase()
-    return products.filter(p =>
+    return list.filter(p =>
       p.name?.toLowerCase().includes(q) ||
       p.metal?.toLowerCase().includes(q) ||
       p.description?.toLowerCase().includes(q) ||
-      p.weightLabel?.toLowerCase().includes(q)
+      p.weightLabel?.toLowerCase().includes(q) ||
+      (p.tags || []).some(t => t.includes(q))
     )
-  }, [products, search])
+  }, [products, search, activeTag])
 
   const kits = useMemo(() => filtered.filter((p) => p.productType === 'bundle'), [filtered])
   const cards = useMemo(() => filtered.filter((p) => p.productType !== 'bundle'), [filtered])
@@ -142,6 +153,31 @@ export default function ShopPage() {
               </button>
             )}
           </div>
+          {allTags.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {allTags.slice(0, 12).map(tag => (
+                <button
+                  key={tag}
+                  onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    activeTag === tag
+                      ? 'bg-amber-500 text-white'
+                      : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                  }`}
+                >
+                  {tag}
+                </button>
+              ))}
+              {activeTag && (
+                <button
+                  onClick={() => setActiveTag(null)}
+                  className="rounded-full px-3 py-1 text-xs text-stone-400 hover:text-red-400 transition-colors"
+                >
+                  Clear filter
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {loading ? (

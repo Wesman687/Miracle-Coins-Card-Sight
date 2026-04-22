@@ -309,6 +309,7 @@ def to_storefront_record(coin_row: Any, image_urls: List[str], listing: Optional
         'productType': storefront.get('productType') or infer_product_type(title, storefront.get('description') or coin_row.description or ''),
         'featured': storefront.get('featured', False),
         'hidden': storefront.get('hidden', False),
+        'tags': storefront.get('tags') or [],
     }
 
 
@@ -671,6 +672,7 @@ class CreateProductRequest(BaseModel):
     ebay_quantity: Optional[int] = None
     offer_price: Optional[float] = None   # eBay best-offer auto-accept price
     image_urls: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
 
 
 @router.post('/storefront/upload-image')
@@ -742,6 +744,7 @@ async def create_product(
         'ebayQuantity': req.ebay_quantity,
         'offerPrice': req.offer_price,
         'metals': effective_metals,
+        'tags': [t.strip().lower() for t in (req.tags or []) if t.strip()],
     }
 
     sku = f"MC-{slug[:36].upper().replace('-', '')}"
@@ -785,6 +788,7 @@ class UpdateProductRequest(BaseModel):
     offer_price: Optional[float] = None   # eBay best-offer auto-accept price; 0 = disable
     image_urls: Optional[List[str]] = None
     bulk_pricing: Optional[List[Dict[str, Any]]] = None
+    tags: Optional[List[str]] = None
 
 
 @router.put('/storefront/products/{product_id}')
@@ -830,6 +834,8 @@ async def update_product(
         storefront_meta['ebayQuantity'] = req.ebay_quantity
     if req.offer_price is not None:
         storefront_meta['offerPrice'] = req.offer_price if req.offer_price > 0 else None
+    if req.tags is not None:
+        storefront_meta['tags'] = [t.strip().lower() for t in req.tags if t.strip()]
 
     # Regenerate features and audience whenever metal or type changes
     if req.metal is not None or req.product_type is not None:
@@ -1500,6 +1506,61 @@ async def generate_description(
     )
     text = resp.choices[0].message.content.strip()
     return {'description': text}
+
+
+class SuggestTagsRequest(BaseModel):
+    title: str = ''
+    metal: str = ''
+    product_type: str = ''
+    description: str = ''
+    existing_tags: Optional[List[str]] = None
+
+
+@router.post('/storefront/suggest-tags')
+async def suggest_tags(
+    req: SuggestTagsRequest,
+    _: str = Depends(verify_admin_token),
+):
+    """Use AI to suggest searchable photo/product tags (e.g. 'eagle', 'flag', 'animals')."""
+    import openai as _openai
+    api_key = os.getenv('OPENAI_API_KEY')
+    if not api_key:
+        raise HTTPException(status_code=500, detail='OPENAI_API_KEY not configured')
+
+    client = _openai.OpenAI(api_key=api_key)
+
+    system = (
+        "You generate short, searchable tags for collectible precious metal card products. "
+        "Tags describe the DESIGN THEME visible on the card — things like 'eagle', 'flag', 'animals', "
+        "'patriotic', 'vintage', 'wildlife', 'western', 'military', 'floral', 'dragon', etc. "
+        "Also include metal type and format tags where relevant. "
+        "Return ONLY a JSON array of 5-10 lowercase single-word or short-phrase tags. No explanation."
+    )
+
+    parts = []
+    if req.title:       parts.append(f"Title: {req.title}")
+    if req.metal:       parts.append(f"Metal: {req.metal}")
+    if req.product_type: parts.append(f"Type: {req.product_type}")
+    if req.description: parts.append(f"Description: {req.description}")
+    if req.existing_tags: parts.append(f"Already tagged: {', '.join(req.existing_tags)}")
+    parts.append("Suggest tags:")
+
+    resp = client.chat.completions.create(
+        model='gpt-4o-mini',
+        messages=[{'role': 'system', 'content': system}, {'role': 'user', 'content': '\n'.join(parts)}],
+        max_tokens=100,
+        temperature=0.5,
+    )
+    raw = resp.choices[0].message.content.strip()
+    try:
+        # Parse JSON array from response
+        import re as _re
+        match = _re.search(r'\[.*?\]', raw, _re.DOTALL)
+        tags = json.loads(match.group(0)) if match else []
+        tags = [t.strip().lower() for t in tags if isinstance(t, str) and t.strip()]
+    except Exception:
+        tags = []
+    return {'tags': tags}
 
 
 # ---------------------------------------------------------------------------
