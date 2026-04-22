@@ -473,25 +473,16 @@ def build_ebay_listing_payload(coin_row: Any, image_urls: List[str], overrides: 
     # eBay requires a non-empty listing description — use a sensible default if none set
     if not listing_description.strip():
         listing_description = f"{title}. Genuine precious metal collectible card by Miracle Coins. A unique and beautiful addition to any collection."
-    # Normalize image URLs for eBay — must be publicly accessible HTTPS URLs
-    # Mirror the same logic as resolveImageUrl() on the frontend:
-    # extract the filename from any /uploads/ path variant and rebuild canonical URL.
-    EBAY_IMAGE_BASE = 'https://server.stream-lineai.com/miracle-coins/uploads'
+    # Image URLs must be publicly accessible — leave stored URLs as-is (they work)
+    # Only fix relative paths that would be unreachable by eBay
+    public_base = os.getenv('LOCAL_API_URL', 'http://localhost:1270')
     def _normalize_image_url(u: str) -> str:
-        import re, sys
-        match = re.search(r'(?:^|/)uploads/(.+)', u)
-        if match:
-            filename = match.group(1).lstrip('/')
-            canonical = f'{EBAY_IMAGE_BASE}/{filename}'
-            print(f'[eBay image] {u!r} → {canonical!r}', file=sys.stderr)
-            return canonical
         if u.startswith('/'):
-            public_base = os.getenv('LOCAL_API_URL', 'http://localhost:1270')
             return f'{public_base}{u}'
         return u
     ebay_images = [_normalize_image_url(u) for u in image_urls[:12] if u]
-    import sys
-    print(f'[eBay publish] image URLs sent to eBay: {ebay_images}', file=sys.stderr)
+    import sys, logging as _logging
+    _logging.getLogger('uvicorn').info(f'[eBay publish] image URLs sent to eBay: {ebay_images}')
 
     return {
         'sku': sku,
@@ -608,16 +599,18 @@ def publish_coin_to_ebay(coin_row: Any, image_urls: List[str], overrides: Option
     }
     _offer_price = payload.get('offer_price')
     _allow_offers = payload.get('allow_offers')
-    import sys
-    print(f'[eBay publish] allow_offers={_allow_offers!r} offer_price={_offer_price!r}', file=sys.stderr)
-    if _allow_offers or (_offer_price is not None and _offer_price > 0):
-        best_offer_terms: Dict[str, Any] = {'bestOfferEnabled': True}
-        if _offer_price is not None and _offer_price > 0:
-            best_offer_terms['autoDeclinePrice'] = {'value': str(round(float(_offer_price), 2)), 'currency': 'USD'}
-        offer_base['bestOfferTerms'] = best_offer_terms
+    import logging as _logging
+    _logging.getLogger('uvicorn').info(f'[eBay publish] allow_offers={_allow_offers!r} offer_price={_offer_price!r}')
+    # Only add bestOfferTerms when there is an actual offer price to set.
+    # Sending bestOfferEnabled=True without a price causes eBay 25001 on publish.
+    if _allow_offers and _offer_price is not None and float(_offer_price) > 0:
+        offer_base['bestOfferTerms'] = {
+            'bestOfferEnabled': True,
+            'autoDeclinePrice': {'value': str(round(float(_offer_price), 2)), 'currency': 'USD'},
+        }
     if policy_ids.get('merchantLocationKey'):
         offer_base['merchantLocationKey'] = policy_ids['merchantLocationKey']
-    print(f'[eBay publish] offer_base bestOfferTerms={offer_base.get("bestOfferTerms")!r}', file=sys.stderr)
+    _logging.getLogger('uvicorn').info(f'[eBay publish] bestOfferTerms={offer_base.get("bestOfferTerms")!r}')
 
     # Detect existing offer for this SKU if not already known
     existing_offer_id = payload.get('existing_offer_id')
