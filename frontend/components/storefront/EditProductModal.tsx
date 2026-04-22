@@ -158,6 +158,26 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
     })
   }
 
+  async function editCurrentPhoto() {
+    if (!currentImage) return
+    try {
+      const proxied = `${API}/storefront/proxy-image?url=${encodeURIComponent(currentImage)}`
+      const res = await fetch(proxied, { headers: { Authorization: `Bearer ${getToken()}` } })
+      if (!res.ok) throw new Error('Could not load image')
+      const blob = await res.blob()
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = e => resolve(e.target?.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+      setRawSrc(dataUrl)
+      setImageStage('editing')
+    } catch (e: any) {
+      setError('Could not load photo for editing: ' + e.message)
+    }
+  }
+
   function handleFileSelect(file: File) {
     const reader = new FileReader()
     reader.onload = e => {
@@ -307,7 +327,18 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
                     </svg>
                   </div>
                 )}
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
+                  {currentImage && (
+                    <button
+                      onClick={editCurrentPhoto}
+                      className="flex-1 flex items-center justify-center gap-2 rounded-full border border-amber-300 py-2 text-sm text-amber-600 hover:bg-amber-50 transition-colors"
+                    >
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3v1m0 16v1m8.66-9h-1M4.34 12h-1m15.07-6.07-.71.71M6.34 17.66l-.71.71m12.73 0-.71-.71M6.34 6.34l-.71-.71M12 8a4 4 0 100 8 4 4 0 000-8z" />
+                      </svg>
+                      Edit photo
+                    </button>
+                  )}
                   <button
                     onClick={() => setImageStage('camera')}
                     className="flex-1 flex items-center justify-center gap-2 rounded-full border border-stone-200 py-2 text-sm text-stone-500 hover:bg-stone-50 hover:border-amber-300 hover:text-amber-600 transition-colors"
@@ -350,6 +381,12 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
                 </div>
                 <p className="text-center text-xs text-green-600">Photo updated</p>
                 <div className="flex gap-2">
+                  <button
+                    onClick={editCurrentPhoto}
+                    className="flex-1 rounded-full border border-amber-300 py-2 text-sm text-amber-600 hover:bg-amber-50 transition-colors"
+                  >
+                    Edit
+                  </button>
                   <button
                     onClick={() => setImageStage('camera')}
                     className="flex-1 rounded-full border border-stone-200 py-2 text-sm text-stone-500 hover:bg-stone-50 transition-colors"
