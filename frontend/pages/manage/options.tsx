@@ -63,15 +63,19 @@ export default function CatalogOptionsPage() {
   }, [])
 
   useEffect(() => {
-    const edits: Record<string, { label: string; basePrice: string; offerPrice: string }> = {}
-    metals.forEach(m => {
-      edits[m.value] = {
-        label:      metalEdits[m.value]?.label      || m.label,
-        basePrice:  metalEdits[m.value]?.basePrice  || (m.basePrice  != null ? String(m.basePrice)  : ''),
-        offerPrice: metalEdits[m.value]?.offerPrice || (m.offerPrice != null ? String(m.offerPrice) : ''),
-      }
+    setMetalEdits(prev => {
+      const edits = { ...prev }
+      metals.forEach(m => {
+        if (!edits[m.value]) {
+          edits[m.value] = {
+            label:      m.label,
+            basePrice:  m.basePrice  != null ? String(m.basePrice)  : '',
+            offerPrice: m.offerPrice != null ? String(m.offerPrice) : '',
+          }
+        }
+      })
+      return edits
     })
-    setMetalEdits(edits)
   }, [metals])
 
   useEffect(() => {
