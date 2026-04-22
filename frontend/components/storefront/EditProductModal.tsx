@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import PhotoEditor from './PhotoEditor'
-import CameraCapture from './CameraCapture'
+import CameraCapture, { CameraCaptureHandle } from './CameraCapture'
 
 import { getAuth } from '../../lib/auth'
 import { resolveImageUrl } from '../../lib/storefront'
@@ -64,7 +64,7 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
   const [unlimited, setUnlimited] = useState(product.quantity === null || product.quantity === 0)
   const [ebayQuantity, setEbayQuantity] = useState(String(product.ebayQuantity || 1))
   const [offerPrice, setOfferPrice] = useState(product.offerPrice ? String(product.offerPrice) : '')
-  const [allowOffers, setAllowOffers] = useState(product.offerPrice != null && product.offerPrice > 0)
+  const [allowOffers, setAllowOffers] = useState(true)
 
   // Standard pricing / offer toggles
   const [useStandardPrice, setUseStandardPrice] = useState(!product.price || product.price === 'Price coming soon')
@@ -84,6 +84,8 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const cameraRef = useRef<CameraCaptureHandle>(null)
+  const pendingSubmitAfterPhoto = useRef(false)
 
   function addTag(raw: string) {
     const t = raw.trim().toLowerCase()
@@ -202,9 +204,15 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
       const { url } = await res.json()
       setNewImageUrl(url)
       setImageStage('done')
+      if (pendingSubmitAfterPhoto.current) {
+        pendingSubmitAfterPhoto.current = false
+        // Photo is saved — now submit the rest of the form
+        setTimeout(() => handleSubmit(), 0)
+      }
     } catch (e: any) {
       setError(e.message)
       setImageStage('current')
+      pendingSubmitAfterPhoto.current = false
     }
   }
 
@@ -215,6 +223,12 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
 
   async function handleSubmit() {
     if (!title.trim()) { setError('Title is required.'); return }
+    // If the camera is still open and hasn't captured yet, auto-capture first
+    if (imageStage === 'camera' && cameraRef.current) {
+      pendingSubmitAfterPhoto.current = true
+      cameraRef.current.capture()
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -362,6 +376,7 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
             )}
             {imageStage === 'camera' && (
               <CameraCapture
+                ref={cameraRef}
                 onCapture={handlePhotoSaved}
                 onCancel={() => setImageStage('current')}
               />

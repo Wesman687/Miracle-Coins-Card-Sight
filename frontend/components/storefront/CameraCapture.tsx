@@ -1,11 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 
 interface Props {
   onCapture: (dataUrl: string) => void
   onCancel: () => void
 }
 
-export default function CameraCapture({ onCapture, onCancel }: Props) {
+export interface CameraCaptureHandle {
+  capture: () => void
+}
+
+const CameraCapture = forwardRef<CameraCaptureHandle, Props>(function CameraCapture({ onCapture, onCancel }, ref) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -15,9 +19,19 @@ export default function CameraCapture({ onCapture, onCancel }: Props) {
     startCrop: { x: number; y: number; w: number; h: number }
   } | null>(null)
 
-  const [liveBrightness, setLiveBrightness] = useState(100)
-  const [liveContrast, setLiveContrast] = useState(100)
-  const [liveSaturation, setLiveSaturation] = useState(100)
+  function loadPhotoDefaults() {
+    try {
+      const raw = localStorage.getItem('mc_photo_defaults')
+      return raw ? JSON.parse(raw) : { brightness: 100, contrast: 100, saturation: 100 }
+    } catch { return { brightness: 100, contrast: 100, saturation: 100 } }
+  }
+  const [liveBrightness, setLiveBrightness] = useState<number>(() => loadPhotoDefaults().brightness)
+  const [liveContrast, setLiveContrast] = useState<number>(() => loadPhotoDefaults().contrast)
+  const [liveSaturation, setLiveSaturation] = useState<number>(() => loadPhotoDefaults().saturation)
+
+  useEffect(() => {
+    try { localStorage.setItem('mc_photo_defaults', JSON.stringify({ brightness: liveBrightness, contrast: liveContrast, saturation: liveSaturation })) } catch {}
+  }, [liveBrightness, liveContrast, liveSaturation])
   const [liveZoom, setLiveZoom] = useState<number>(() => {
     try { const s = localStorage.getItem('cameraZoom'); return s ? Math.min(4, Math.max(1, parseFloat(s))) : 1 } catch { return 1 }
   })
@@ -109,6 +123,8 @@ export default function CameraCapture({ onCapture, onCancel }: Props) {
     }
     setLiveCrop({ x, y, w, h })
   }
+
+  useImperativeHandle(ref, () => ({ capture: () => capture() }))
 
   function capture() {
     if (!videoRef.current) return
@@ -236,4 +252,6 @@ export default function CameraCapture({ onCapture, onCancel }: Props) {
       </div>
     </div>
   )
-}
+})
+
+export default CameraCapture

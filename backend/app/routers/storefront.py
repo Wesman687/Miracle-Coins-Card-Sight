@@ -470,6 +470,9 @@ def build_ebay_listing_payload(coin_row: Any, image_urls: List[str], overrides: 
         listing_description += f"\n\nMetal content: {storefront.get('weightLabel')}"
     if storefront.get('features'):
         listing_description += "\n\nHighlights:\n- " + "\n- ".join(storefront.get('features'))
+    # eBay requires a non-empty listing description — use a sensible default if none set
+    if not listing_description.strip():
+        listing_description = f"{title}. Genuine precious metal collectible card by Miracle Coins. A unique and beautiful addition to any collection."
     # Normalize image URLs for eBay — must be publicly accessible
     public_base = os.getenv('LOCAL_API_URL', 'http://localhost:1270')
     def _normalize_image_url(u: str) -> str:

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import PhotoEditor from './PhotoEditor'
-import CameraCapture from './CameraCapture'
+import CameraCapture, { CameraCaptureHandle } from './CameraCapture'
 
 import { getAuth } from '../../lib/auth'
 
@@ -72,11 +72,13 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
   const [rawSrc, setRawSrc] = useState<string | null>(null)
   const [finalImage, setFinalImage] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const cameraRef = useRef<CameraCaptureHandle>(null)
+  const pendingSubmitAfterPhoto = useRef(false)
 
   // eBay listing option
   const [listOnEbay, setListOnEbay] = useState(false)
   const [ebayStatus, setEbayStatus] = useState<string | null>(null)
-  const [allowOffers, setAllowOffers] = useState(false)
+  const [allowOffers, setAllowOffers] = useState(true)
   const [useStandardOffer, setUseStandardOffer] = useState(true)
   const [customOfferPrice, setCustomOfferPrice] = useState('')
 
@@ -186,6 +188,12 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
   // ── Submit ────────────────────────────────────────────────────────────────
   async function handleSubmit() {
     if (!title.trim()) { setError('Title is required.'); return }
+    // If the camera is open and no photo taken yet, auto-capture first
+    if (imageStage === 'camera' && cameraRef.current) {
+      pendingSubmitAfterPhoto.current = true
+      cameraRef.current.capture()
+      return
+    }
     setSaving(true)
     setError(null)
 
@@ -326,7 +334,15 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
             {/* Camera */}
             {imageStage === 'camera' && (
               <CameraCapture
-                onCapture={dataUrl => { setFinalImage(dataUrl); setImageStage('done') }}
+                ref={cameraRef}
+                onCapture={dataUrl => {
+                  setFinalImage(dataUrl)
+                  setImageStage('done')
+                  if (pendingSubmitAfterPhoto.current) {
+                    pendingSubmitAfterPhoto.current = false
+                    setTimeout(() => handleSubmit(), 0)
+                  }
+                }}
                 onCancel={() => setImageStage('empty')}
               />
             )}
