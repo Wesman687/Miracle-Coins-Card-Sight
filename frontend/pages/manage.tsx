@@ -5,6 +5,7 @@ import EditProductModal from '../components/storefront/EditProductModal'
 
 import { getAuth } from '../lib/auth'
 import { resolveImageUrl } from '../lib/storefront'
+import ProductSearchBar from '../components/storefront/ProductSearchBar'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1270/api/v1'
 function getToken() { return getAuth()?.token || 'manage-token' }
@@ -22,6 +23,8 @@ type Product = {
   ebayQuantity?: number | null
   offerPrice?: number | null
   metals?: string[]
+  tags?: string[]
+  description?: string
 }
 
 const METAL_OPTIONS = ['gold', 'silver', 'platinum', 'palladium', 'copper', 'other']
@@ -72,6 +75,7 @@ export default function ManagePage() {
 
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
+  const [activeTag, setActiveTag] = useState<string | null>(null)
   const [metalFilter, setMetalFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [hasImageFilter, setHasImageFilter] = useState('')
@@ -117,9 +121,10 @@ export default function ManagePage() {
   useEffect(() => { loadProducts() }, [loadProducts])
 
   function clearFilters() {
-    setSearch(''); setSearchInput(''); setMetalFilter(''); setTypeFilter(''); setHasImageFilter(''); setHasEbayFilter('')
+    setSearch(''); setSearchInput(''); setMetalFilter(''); setTypeFilter(''); setHasImageFilter(''); setHasEbayFilter(''); setActiveTag(null)
   }
-  const filtersActive = search || metalFilter || typeFilter || hasImageFilter || hasEbayFilter
+  const filtersActive = search || metalFilter || typeFilter || hasImageFilter || hasEbayFilter || activeTag
+  const displayedProducts = activeTag ? products.filter(p => (p.tags || []).includes(activeTag)) : products
 
   return (
     <PublicLayout title="Manage — Miracle Coins">
@@ -162,24 +167,20 @@ export default function ManagePage() {
 
         {/* Search + filters */}
         <div className="flex flex-wrap gap-3 items-center">
-          <form
-            onSubmit={e => { e.preventDefault(); setSearch(searchInput) }}
-            className="flex gap-2"
-          >
-            <input
-              type="text"
-              value={searchInput}
-              onChange={e => setSearchInput(e.target.value)}
-              placeholder="Search title, description, SKU…"
-              className="rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 focus:border-amber-400 focus:outline-none w-56"
-            />
-            <button
-              type="submit"
-              className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 transition-colors"
-            >
-              Search
-            </button>
-          </form>
+          <ProductSearchBar
+            value={searchInput}
+            onChange={setSearchInput}
+            onSubmit={() => setSearch(searchInput)}
+            placeholder="Search title, tags, SKU…"
+            activeTag={activeTag}
+            tags={(() => {
+              const freq: Record<string, number> = {}
+              products.forEach(p => (p.tags || []).forEach(t => { freq[t] = (freq[t] || 0) + 1 }))
+              return Object.entries(freq).sort((a, b) => b[1] - a[1]).map(([t]) => t)
+            })()}
+            onTagClick={tag => setActiveTag(activeTag === tag ? null : tag)}
+            onTagClear={() => setActiveTag(null)}
+          />
 
           <select
             value={metalFilter}
@@ -256,13 +257,13 @@ export default function ManagePage() {
                 <div key={i} className="animate-pulse h-20 rounded-xl bg-stone-100" />
               ))}
             </div>
-          ) : products.length === 0 ? (
+          ) : displayedProducts.length === 0 ? (
             <div className="rounded-xl border border-stone-200 bg-white p-12 text-center text-stone-400">
               {filtersActive ? 'No products match your filters.' : 'No products yet.'}
             </div>
           ) : (
             <div className="space-y-2">
-              {products.map((product) => {
+              {displayedProducts.map((product) => {
                 const image = resolveImageUrl(product.image)
                 return (
                   <div key={product.id} className="flex items-center gap-4 rounded-xl border border-stone-200 bg-white p-4">

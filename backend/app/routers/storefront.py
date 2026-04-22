@@ -1000,7 +1000,7 @@ async def get_manage_catalog(
     params: dict = {'limit': limit}
 
     if search:
-        where_clauses.append("(c.title ILIKE :search OR c.description ILIKE :search OR c.sku ILIKE :search)")
+        where_clauses.append("(c.title ILIKE :search OR c.description ILIKE :search OR c.sku ILIKE :search OR c.shopify_metadata::text ILIKE :search)")
         params['search'] = f'%{search}%'
     metal_filter = metal.lower() if metal else None  # applied in Python to check metals[] array
     if product_type:

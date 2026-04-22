@@ -114,6 +114,11 @@ export default function PhotoEditor({ src, onSave, onCancel }: Props) {
     if (imgRef.current) renderCanvas(imgRef.current, brightness, contrast, saturation, rotation)
   }, [brightness, contrast, saturation, rotation])
 
+  // Auto-save adjustments as the new default whenever they change
+  useEffect(() => {
+    localStorage.setItem(DEFAULTS_KEY, JSON.stringify({ brightness, contrast, saturation }))
+  }, [brightness, contrast, saturation])
+
   // ── Crop helpers ──────────────────────────────────────────────────────────
   function clampCrop(c: Crop, iw: number, ih: number, r: number | null): Crop {
     const MIN = 20
