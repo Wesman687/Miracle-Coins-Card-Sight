@@ -71,6 +71,7 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
   const [imageStage, setImageStage] = useState<ImageStage>('empty')
   const [rawSrc, setRawSrc] = useState<string | null>(null)
   const [finalImage, setFinalImage] = useState<string | null>(null)
+  const finalImageRef = useRef<string | null>(null)  // mirror of finalImage for use in stale closures
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<CameraCaptureHandle>(null)
   const pendingSubmitAfterPhoto = useRef(false)
@@ -170,6 +171,7 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
 
   // ── Photo editor callbacks ────────────────────────────────────────────────
   function handlePhotoSaved(dataUrl: string) {
+    finalImageRef.current = dataUrl
     setFinalImage(dataUrl)
     setImageStage('done')
   }
@@ -180,6 +182,7 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
   }
 
   function changePhoto() {
+    finalImageRef.current = null
     setFinalImage(null)
     setRawSrc(null)
     setImageStage('empty')
@@ -200,9 +203,10 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
     try {
       let imageUrls: string[] = []
 
-      // Upload image if we have one
-      if (finalImage) {
-        const blob = await fetch(finalImage).then(r => r.blob())
+      // Upload image if we have one (read from ref to get current value even in stale closures)
+      const imageDataUrl = finalImageRef.current
+      if (imageDataUrl) {
+        const blob = await fetch(imageDataUrl).then(r => r.blob())
         const form = new FormData()
         form.append('file', blob, 'product.jpg')
         const uploadRes = await fetch(`${API}/storefront/upload-image`, {
@@ -336,6 +340,7 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
               <CameraCapture
                 ref={cameraRef}
                 onCapture={dataUrl => {
+                  finalImageRef.current = dataUrl
                   setFinalImage(dataUrl)
                   setImageStage('done')
                   if (pendingSubmitAfterPhoto.current) {
