@@ -895,6 +895,18 @@ async def update_product(
 class BulkDeleteRequest(BaseModel):
     ids: List[int]
 
+@router.post('/storefront/products/bulk-set-unlimited')
+async def bulk_set_unlimited(
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_admin_token),
+):
+    """Set all products to unlimited quantity (quantity = 0)."""
+    result = db.execute(text('UPDATE coins SET quantity = 0 RETURNING id'))
+    updated = len(result.fetchall())
+    db.commit()
+    return {'updated': updated}
+
+
 @router.post('/storefront/products/bulk-delete')
 async def bulk_delete_products(
     req: BulkDeleteRequest,
