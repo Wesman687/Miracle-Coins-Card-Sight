@@ -1555,14 +1555,23 @@ async def suggest_tags(
     client = _openai.OpenAI(api_key=api_key)
 
     system = (
-        "You generate short, searchable tags for collectible precious metal card products. "
-        "The product TITLE is your PRIMARY source — extract keywords and themes directly from the title words. "
-        "For example: title 'No Kings' → tags like 'no kings', 'revolution', 'freedom', 'anti-monarchy', 'political'. "
-        "Title 'American Eagle' → 'eagle', 'patriotic', 'american'. "
-        "Title 'Wolf Pack' → 'wolf', 'wildlife', 'animals'. "
-        "Do NOT invent generic precious-metal or military tags that aren't implied by the title. "
-        "Also include the metal type as a tag. "
-        "Return ONLY a JSON array of 5-10 lowercase single-word or short-phrase tags. No explanation."
+        "You generate searchable browse/filter tags for collectible precious metal cards sold in an online shop. "
+        "Tags help customers FIND groups of related cards — think category labels, not descriptions.\n\n"
+        "Rules:\n"
+        "1. Derive tags from the title first. Extract the specific subject AND its broader category.\n"
+        "   - 'American Eagle' → ['eagle', 'bird', 'animals', 'patriotic', 'american']\n"
+        "   - 'Wolf Pack' → ['wolf', 'animals', 'wildlife']\n"
+        "   - 'No Kings' → ['political', 'revolution', 'freedom', 'american history']\n"
+        "   - 'Bald Eagle Flag' → ['eagle', 'bird', 'animals', 'patriotic', 'flag', 'americana']\n"
+        "   - 'Grizzly Bear' → ['bear', 'animals', 'wildlife', 'nature']\n"
+        "   - 'US Marine' → ['military', 'marines', 'patriotic']\n"
+        "2. Always include a BROAD CATEGORY tag so cards can be grouped: "
+        "'animals', 'wildlife', 'patriotic', 'political', 'military', 'nature', 'sports', "
+        "'religious', 'holiday', 'western', 'fantasy', 'historical', 'floral', etc.\n"
+        "3. NEVER include: the brand name, the metal type, the word 'card', 'coin', 'collectible', "
+        "'grain', 'bar', or any unit of measurement. Those are already known from other fields.\n"
+        "4. Do not duplicate tags already in the existing list.\n"
+        "Return ONLY a JSON array of 5-10 lowercase tags. No explanation."
     )
 
     parts = []
