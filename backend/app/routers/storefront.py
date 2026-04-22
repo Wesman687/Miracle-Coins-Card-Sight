@@ -103,7 +103,8 @@ class EbayImportRequest(BaseModel):
 class EbayPublishRequest(BaseModel):
     quantity: Optional[int] = None
     price: Optional[float] = None
-    offer_price: Optional[float] = None   # best-offer auto-accept price
+    offer_price: Optional[float] = None   # best-offer minimum (auto-decline below this)
+    allow_offers: Optional[bool] = None   # enable best offers on this listing
     category_id: Optional[str] = None
     marketplace_id: str = 'EBAY_US'
 
@@ -488,7 +489,8 @@ def build_ebay_listing_payload(coin_row: Any, image_urls: List[str], overrides: 
         'existing_offer_id': ebay.get('offerId'),
         'existing_item_id': ebay.get('itemId'),
         'existing_url': ebay.get('url'),
-        'offer_price': (overrides or {}).get('offer_price') or storefront.get('offerPrice'),
+        'offer_price': (overrides or {}).get('offer_price') if 'offer_price' in (overrides or {}) else storefront.get('offerPrice'),
+        'allow_offers': (overrides or {}).get('allow_offers'),
     }
 
 
@@ -587,11 +589,13 @@ def publish_coin_to_ebay(coin_row: Any, image_urls: List[str], overrides: Option
         'pricingSummary': {'price': {'value': str(payload['price']), 'currency': 'USD'}},
         'listingPolicies': listing_policies,
     }
-    if payload.get('offer_price'):
-        offer_base['bestOfferTerms'] = {
-            'bestOfferEnabled': True,
-            'autoDeclinePrice': {'value': str(round(float(payload['offer_price']), 2)), 'currency': 'USD'},
-        }
+    _offer_price = payload.get('offer_price')
+    _allow_offers = payload.get('allow_offers')
+    if _allow_offers or (_offer_price is not None and _offer_price > 0):
+        best_offer_terms: Dict[str, Any] = {'bestOfferEnabled': True}
+        if _offer_price is not None and _offer_price > 0:
+            best_offer_terms['autoDeclinePrice'] = {'value': str(round(float(_offer_price), 2)), 'currency': 'USD'}
+        offer_base['bestOfferTerms'] = best_offer_terms
     if policy_ids.get('merchantLocationKey'):
         offer_base['merchantLocationKey'] = policy_ids['merchantLocationKey']
 

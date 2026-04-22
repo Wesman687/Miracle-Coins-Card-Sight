@@ -62,6 +62,7 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
   const [unlimited, setUnlimited] = useState(product.quantity === null || product.quantity === 0)
   const [ebayQuantity, setEbayQuantity] = useState(String(product.ebayQuantity || 1))
   const [offerPrice, setOfferPrice] = useState(product.offerPrice ? String(product.offerPrice) : '')
+  const [allowOffers, setAllowOffers] = useState(product.offerPrice != null && product.offerPrice > 0)
 
   // Standard pricing / offer toggles
   const [useStandardPrice, setUseStandardPrice] = useState(!product.price || product.price === 'Price coming soon')
@@ -210,7 +211,8 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
         body: JSON.stringify({
           price: effectivePrice,
           quantity: parseInt(ebayQuantity) || 1,
-          offer_price: effectiveOfferPrice,
+          allow_offers: allowOffers,
+          offer_price: allowOffers ? effectiveOfferPrice : undefined,
         }),
       })
       if (!res.ok) {
@@ -512,7 +514,19 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
             />
             <span className="text-xs text-stone-400">Separate from website stock</span>
           </div>
-          {(() => {
+          <div className="flex items-center gap-3">
+            <label className="text-xs font-medium text-stone-500 w-24 flex-shrink-0">Allow offers</label>
+            <label className="flex items-center gap-1.5 text-xs text-stone-500 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={allowOffers}
+                onChange={e => setAllowOffers(e.target.checked)}
+                className="accent-amber-500"
+              />
+              Enable best offers on this listing
+            </label>
+          </div>
+          {allowOffers && (() => {
             const primaryMetal = metals.find(m => m.value === selectedMetals[0])
             const metalOfferPrice = primaryMetal?.offerPrice ?? null
             return (
@@ -529,7 +543,7 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
                       type="number" min="0" step="0.01"
                       value={offerPrice}
                       onChange={e => setOfferPrice(e.target.value)}
-                      placeholder="—"
+                      placeholder="none"
                       className="w-24 rounded-lg border border-stone-200 pl-6 pr-2 py-1.5 text-sm text-stone-800 placeholder-stone-300 focus:border-amber-400 focus:outline-none"
                     />
                   </div>
@@ -545,7 +559,7 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
                     Standard
                   </label>
                 )}
-                <span className="text-xs text-stone-400">Buyers cannot submit offers below this price</span>
+                <span className="text-xs text-stone-400">Auto-decline offers below this price (optional)</span>
               </div>
             )
           })()}
