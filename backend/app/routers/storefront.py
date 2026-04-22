@@ -901,7 +901,7 @@ async def bulk_set_unlimited(
     _: str = Depends(verify_admin_token),
 ):
     """Set all products to unlimited quantity (quantity = 0)."""
-    result = db.execute(text('UPDATE coins SET quantity = 0 RETURNING id'))
+    result = db.execute(text('UPDATE coins SET quantity = NULL RETURNING id'))
     updated = len(result.fetchall())
     db.commit()
     return {'updated': updated}
