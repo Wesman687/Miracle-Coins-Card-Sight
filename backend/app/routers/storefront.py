@@ -1645,22 +1645,33 @@ async def suggest_tags(
 @router.get('/storefront/ebay-categories')
 async def get_ebay_categories(parent_id: str = '39491', _: str = Depends(verify_admin_token)):
     """Look up eBay leaf categories under a given parent ID."""
-    token = get_ebay_sell_access_token()
+    import base64
+    env = load_ebay_publish_env()
+    app_id = env.get('EBAY_APP_ID') or os.getenv('EBAY_APP_ID', '')
+    cert_id = env.get('EBAY_CERT_ID') or os.getenv('EBAY_CERT_ID', '')
+    # Get app-level token (client credentials) — taxonomy API requires this scope
+    creds = base64.b64encode(f'{app_id}:{cert_id}'.encode()).decode()
+    tok_req = urllib.request.Request(
+        'https://api.ebay.com/identity/v1/oauth2/token', method='POST',
+        headers={'Authorization': f'Basic {creds}', 'Content-Type': 'application/x-www-form-urlencoded'})
+    tok_req.data = b'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope'
+    with urllib.request.urlopen(tok_req, timeout=15) as r:
+        app_token = json.loads(r.read().decode())['access_token']
     try:
         url = f'https://api.ebay.com/commerce/taxonomy/v1/category_tree/0/get_category_subtree?category_id={parent_id}'
-        req = urllib.request.Request(url, headers={'Authorization': f'Bearer {token}', 'Accept': 'application/json'})
+        req = urllib.request.Request(url, headers={'Authorization': f'Bearer {app_token}', 'Accept': 'application/json'})
         with urllib.request.urlopen(req, timeout=15) as r:
             data = json.loads(r.read().decode())
-        def extract_leaves(node, results=[]):
+        def extract_leaves(node, acc=None):
+            if acc is None: acc = []
             cat = node.get('category', {})
             children = node.get('childCategoryTreeNodes', [])
             if not children:
-                results.append({'id': cat.get('categoryId'), 'name': cat.get('categoryName')})
+                acc.append({'id': cat.get('categoryId'), 'name': cat.get('categoryName')})
             for child in children:
-                extract_leaves(child, results)
-            return results
-        root = data.get('categorySubtreeNode', {})
-        leaves = extract_leaves(root, [])
+                extract_leaves(child, acc)
+            return acc
+        leaves = extract_leaves(data.get('categorySubtreeNode', {}))
         return {'parent_id': parent_id, 'leaf_categories': leaves}
     except Exception as e:
         return {'error': str(e)}
