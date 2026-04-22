@@ -473,17 +473,25 @@ def build_ebay_listing_payload(coin_row: Any, image_urls: List[str], overrides: 
     # eBay requires a non-empty listing description — use a sensible default if none set
     if not listing_description.strip():
         listing_description = f"{title}. Genuine precious metal collectible card by Miracle Coins. A unique and beautiful addition to any collection."
-    # Normalize image URLs for eBay — must be publicly accessible
-    public_base = os.getenv('LOCAL_API_URL', 'http://localhost:1270')
+    # Normalize image URLs for eBay — must be publicly accessible HTTPS URLs
+    # Mirror the same logic as resolveImageUrl() on the frontend:
+    # extract the filename from any /uploads/ path variant and rebuild canonical URL.
+    EBAY_IMAGE_BASE = 'https://server.stream-lineai.com/miracle-coins/uploads'
     def _normalize_image_url(u: str) -> str:
-        # Fix old URLs missing the /miracle-coins prefix
-        import re
-        u = re.sub(r'https?://server\.stream-lineai\.com/uploads/', f'{public_base}/uploads/', u)
-        # Resolve relative paths
+        import re, sys
+        match = re.search(r'(?:^|/)uploads/(.+)', u)
+        if match:
+            filename = match.group(1).lstrip('/')
+            canonical = f'{EBAY_IMAGE_BASE}/{filename}'
+            print(f'[eBay image] {u!r} → {canonical!r}', file=sys.stderr)
+            return canonical
         if u.startswith('/'):
-            u = f'{public_base}{u}'
+            public_base = os.getenv('LOCAL_API_URL', 'http://localhost:1270')
+            return f'{public_base}{u}'
         return u
     ebay_images = [_normalize_image_url(u) for u in image_urls[:12] if u]
+    import sys
+    print(f'[eBay publish] image URLs sent to eBay: {ebay_images}', file=sys.stderr)
 
     return {
         'sku': sku,
