@@ -56,7 +56,17 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
   const [productType, setProductType] = useState('card')
   const [useStandardPrice, setUseStandardPrice] = useState(true)
   const [customPrice, setCustomPrice] = useState('')
-  const [weightLabel, setWeightLabel] = useState('1/4 grain gold')
+  // Weight label is derived from the primary metal — not editable by the user
+  const WEIGHT_LABELS: Record<string, string> = {
+    gold: '1/4 grain gold',
+    platinum: '1/4 grain platinum',
+    silver: '1 grain silver',
+    palladium: '1/4 grain palladium',
+    copper: '1 grain copper',
+  }
+  function getWeightLabel(metal: string) {
+    return WEIGHT_LABELS[metal.toLowerCase()] ?? `1/4 grain ${metal.toLowerCase()}`
+  }
   const [description, setDescription] = useState('')
   const [quantity, setQuantity] = useState('1')
   const [unlimited, setUnlimited] = useState(false)
@@ -240,7 +250,7 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
           product_type: productType,
           price: effectivePrice,
           description: description.trim(),
-          weight_label: weightLabel.trim(),
+          weight_label: getWeightLabel(selectedMetals[0]),
           quantity: unlimited ? 0 : (parseInt(quantity) || 1),
           ebay_quantity: listOnEbay ? (parseInt(ebayQuantity) || 1) : undefined,
           image_urls: imageUrls,
@@ -499,18 +509,6 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
                   className="w-full rounded-xl border border-stone-200 px-4 py-2.5 text-sm text-stone-900 placeholder-stone-400 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400 disabled:bg-stone-50 disabled:text-stone-400"
                 />
               </div>
-            </div>
-
-            {/* Weight label */}
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-stone-700">Weight Label</label>
-              <input
-                type="text"
-                value={weightLabel}
-                onChange={e => setWeightLabel(e.target.value)}
-                placeholder="e.g. 1/4 grain gold"
-                className="w-full rounded-xl border border-stone-200 px-4 py-2.5 text-sm text-stone-900 placeholder-stone-300 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
-              />
             </div>
 
             {/* Description */}
