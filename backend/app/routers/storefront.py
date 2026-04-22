@@ -597,6 +597,8 @@ def publish_coin_to_ebay(coin_row: Any, image_urls: List[str], overrides: Option
     }
     _offer_price = payload.get('offer_price')
     _allow_offers = payload.get('allow_offers')
+    import sys
+    print(f'[eBay publish] allow_offers={_allow_offers!r} offer_price={_offer_price!r}', file=sys.stderr)
     if _allow_offers or (_offer_price is not None and _offer_price > 0):
         best_offer_terms: Dict[str, Any] = {'bestOfferEnabled': True}
         if _offer_price is not None and _offer_price > 0:
@@ -604,6 +606,7 @@ def publish_coin_to_ebay(coin_row: Any, image_urls: List[str], overrides: Option
         offer_base['bestOfferTerms'] = best_offer_terms
     if policy_ids.get('merchantLocationKey'):
         offer_base['merchantLocationKey'] = policy_ids['merchantLocationKey']
+    print(f'[eBay publish] offer_base bestOfferTerms={offer_base.get("bestOfferTerms")!r}', file=sys.stderr)
 
     # Detect existing offer for this SKU if not already known
     existing_offer_id = payload.get('existing_offer_id')
@@ -1443,7 +1446,9 @@ async def publish_product_to_ebay(
     row = db.execute(text("SELECT c.id, c.sku, c.title, c.description, c.computed_price, c.quantity, c.shopify_metadata, COALESCE(json_agg(ci.url ORDER BY ci.sort_order) FILTER (WHERE ci.url IS NOT NULL), '[]'::json) AS images FROM coins c LEFT JOIN coin_images ci ON ci.coin_id = c.id WHERE c.id = :id GROUP BY c.id"), {'id': coin_id}).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail='Coin not found')
-    result = publish_coin_to_ebay(row, row.images or [], payload.model_dump(exclude_none=True))
+    overrides = payload.model_dump(exclude_none=True)
+    import sys; print(f'[eBay publish] overrides sent to publish_coin_to_ebay: {overrides}', file=sys.stderr)
+    result = publish_coin_to_ebay(row, row.images or [], overrides)
     metadata = parse_json(row.shopify_metadata, {})
     ebay = metadata.get('ebay', {}) if isinstance(metadata, dict) else {}
     ebay.update({
@@ -1458,7 +1463,7 @@ async def publish_product_to_ebay(
     metadata['ebay'] = ebay
     db.execute(text("UPDATE coins SET sku = :sku, shopify_metadata = :shopify_metadata, updated_at = NOW() WHERE id = :id"), {'id': coin_id, 'sku': result.get('sku') or row.sku, 'shopify_metadata': json.dumps(metadata)})
     db.commit()
-    return {'success': True, 'result': result, 'ebay': ebay}
+    return {'success': True, 'result': result, 'ebay': ebay, 'debug': {'allow_offers': overrides.get('allow_offers'), 'offer_price': overrides.get('offer_price')}}
 
 
 # ---------------------------------------------------------------------------

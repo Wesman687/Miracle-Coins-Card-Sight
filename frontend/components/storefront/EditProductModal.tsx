@@ -261,7 +261,8 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
         setEbayResult({ success: false, message: err.detail || `Error ${res.status}` })
       } else {
         const data = await res.json()
-        setEbayResult({ success: true, message: data.ebay?.url ? `Listed: ${data.ebay.url}` : 'Published to eBay!' })
+        const dbg = data.debug ? ` [allow_offers=${data.debug.allow_offers}, offer_price=${data.debug.offer_price}]` : ''
+        setEbayResult({ success: true, message: (data.ebay?.url ? `Listed: ${data.ebay.url}` : 'Published to eBay!') + dbg })
       }
     } catch (e: any) {
       setEbayResult({ success: false, message: e.message })
