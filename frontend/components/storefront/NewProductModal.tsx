@@ -33,11 +33,6 @@ const TYPES = [
   { value: 'bundle', label: 'Kit / Set' },
 ]
 
-const WEIGHT_DEFAULTS: Record<string, string> = {
-  gold: '1/4 grain gold',
-  platinum: '1/4 grain platinum',
-  silver: '1 grain silver',
-}
 
 export default function NewProductModal({ onClose, onSaved }: Props) {
   // Options from server (metal base prices + offer prices)
@@ -162,8 +157,6 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
         return next.length > 0 ? next : prev // must keep at least one
       }
       const next = [...prev, m]
-      // Auto-fill weight label when it's the only selection
-      if (next.length === 1) setWeightLabel(WEIGHT_DEFAULTS[m] ?? '')
       return next
     })
   }
