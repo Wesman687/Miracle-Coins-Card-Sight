@@ -69,7 +69,7 @@ export default function NewProductModal({ onClose, onSaved }: Props) {
   }
   const [description, setDescription] = useState('')
   const [quantity, setQuantity] = useState('1')
-  const [unlimited, setUnlimited] = useState(false)
+  const [unlimited, setUnlimited] = useState(true)
   const [ebayQuantity, setEbayQuantity] = useState('1')
 
   // Derived from the primary metal's settings
