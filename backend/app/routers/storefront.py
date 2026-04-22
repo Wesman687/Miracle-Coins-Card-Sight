@@ -1642,6 +1642,30 @@ async def suggest_tags(
 # Product options (dynamic metal & type lists)
 # ---------------------------------------------------------------------------
 
+@router.get('/storefront/ebay-categories')
+async def get_ebay_categories(parent_id: str = '39491', _: str = Depends(verify_admin_token)):
+    """Look up eBay leaf categories under a given parent ID."""
+    token = get_ebay_sell_access_token()
+    try:
+        url = f'https://api.ebay.com/commerce/taxonomy/v1/category_tree/0/get_category_subtree?category_id={parent_id}'
+        req = urllib.request.Request(url, headers={'Authorization': f'Bearer {token}', 'Accept': 'application/json'})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            data = json.loads(r.read().decode())
+        def extract_leaves(node, results=[]):
+            cat = node.get('category', {})
+            children = node.get('childCategoryTreeNodes', [])
+            if not children:
+                results.append({'id': cat.get('categoryId'), 'name': cat.get('categoryName')})
+            for child in children:
+                extract_leaves(child, results)
+            return results
+        root = data.get('categorySubtreeNode', {})
+        leaves = extract_leaves(root, [])
+        return {'parent_id': parent_id, 'leaf_categories': leaves}
+    except Exception as e:
+        return {'error': str(e)}
+
+
 @router.get('/storefront/options')
 async def get_product_options():
     return load_product_options()
