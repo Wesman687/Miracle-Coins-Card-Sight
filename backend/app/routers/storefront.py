@@ -601,16 +601,15 @@ def publish_coin_to_ebay(coin_row: Any, image_urls: List[str], overrides: Option
     _allow_offers = payload.get('allow_offers')
     import logging as _logging
     _logging.getLogger('uvicorn').info(f'[eBay publish] allow_offers={_allow_offers!r} offer_price={_offer_price!r}')
-    # Add bestOfferTerms when allow_offers is enabled.
-    # autoDeclinePrice is optional — only include it when a price is actually set.
+    # bestOfferTerms must be nested inside listingPolicies (not top-level on the offer)
     if _allow_offers:
         best_offer_terms: Dict[str, Any] = {'bestOfferEnabled': True}
         if _offer_price is not None and float(_offer_price) > 0:
             best_offer_terms['autoDeclinePrice'] = {'value': str(round(float(_offer_price), 2)), 'currency': 'USD'}
-        offer_base['bestOfferTerms'] = best_offer_terms
+        offer_base['listingPolicies']['bestOfferTerms'] = best_offer_terms
     if policy_ids.get('merchantLocationKey'):
         offer_base['merchantLocationKey'] = policy_ids['merchantLocationKey']
-    _logging.getLogger('uvicorn').info(f'[eBay publish] bestOfferTerms={offer_base.get("bestOfferTerms")!r}')
+    _logging.getLogger('uvicorn').info(f'[eBay publish] listingPolicies={offer_base["listingPolicies"]!r}')
 
     # Detect existing offer for this SKU if not already known
     existing_offer_id = payload.get('existing_offer_id')
