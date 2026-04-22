@@ -9,6 +9,7 @@ function getToken() { return getAuth()?.token || 'manage-token' }
 interface MetalOption  { value: string; label: string; basePrice?: number; offerPrice?: number }
 interface TypeOption   { value: string; label: string }
 interface DiscountTier { minTotal: number; pct: number }
+interface VolumeTier   { minQty: number; pct: number }
 
 const DEFAULT_METALS: MetalOption[] = [
   { value: 'gold',     label: 'Gold' },
@@ -21,9 +22,12 @@ const DEFAULT_TYPES: TypeOption[] = [
 ]
 
 export default function CatalogOptionsPage() {
-  const [metals,    setMetals]    = useState<MetalOption[]>(DEFAULT_METALS)
-  const [types,     setTypes]     = useState<TypeOption[]>(DEFAULT_TYPES)
-  const [discounts, setDiscounts] = useState<DiscountTier[]>([])
+  const [metals,          setMetals]          = useState<MetalOption[]>(DEFAULT_METALS)
+  const [types,           setTypes]           = useState<TypeOption[]>(DEFAULT_TYPES)
+  const [discounts,       setDiscounts]       = useState<DiscountTier[]>([])
+  const [volumeDiscounts, setVolumeDiscounts] = useState<VolumeTier[]>([
+    { minQty: 3, pct: 3 }, { minQty: 5, pct: 5 }, { minQty: 10, pct: 7 },
+  ])
   const [saving,    setSaving]    = useState(false)
   const [saved,     setSaved]     = useState(false)
 
@@ -37,6 +41,10 @@ export default function CatalogOptionsPage() {
   const [newMin, setNewMin] = useState('')
   const [newPct, setNewPct] = useState('')
 
+  const [volEdits, setVolEdits] = useState<{ minQty: string; pct: string }[]>([])
+  const [newVolQty, setNewVolQty] = useState('')
+  const [newVolPct, setNewVolPct] = useState('')
+
   const [testMode, setTestMode]       = useState(false)
   const [inquiryMode, setInquiryMode] = useState(false)
 
@@ -47,6 +55,7 @@ export default function CatalogOptionsPage() {
         if (data.metals?.length)    setMetals(data.metals)
         if (data.types?.length)     setTypes(data.types)
         if (data.discounts?.length) setDiscounts(data.discounts)
+        if (data.volume_discounts?.length) setVolumeDiscounts(data.volume_discounts)
         if (typeof data.test_mode === 'boolean') setTestMode(data.test_mode)
         if (typeof data.inquiry_mode === 'boolean') setInquiryMode(data.inquiry_mode)
       })
@@ -73,9 +82,17 @@ export default function CatalogOptionsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discounts])
 
+  useEffect(() => {
+    setVolEdits(volumeDiscounts.map((d, i) => ({
+      minQty: volEdits[i]?.minQty || String(d.minQty),
+      pct:    volEdits[i]?.pct    || String(d.pct),
+    })))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [volumeDiscounts])
+
   async function persist(
     nextMetals: MetalOption[], nextTypes: TypeOption[], nextDiscounts: DiscountTier[],
-    nextTestMode?: boolean, nextInquiryMode?: boolean,
+    nextTestMode?: boolean, nextInquiryMode?: boolean, nextVolumeDiscounts?: VolumeTier[],
   ) {
     setSaving(true); setSaved(false)
     try {
@@ -84,6 +101,7 @@ export default function CatalogOptionsPage() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
         body: JSON.stringify({
           metals: nextMetals, types: nextTypes, discounts: nextDiscounts,
+          volume_discounts: nextVolumeDiscounts ?? volumeDiscounts,
           test_mode: nextTestMode ?? testMode,
           inquiry_mode: nextInquiryMode ?? inquiryMode,
         }),
@@ -173,6 +191,30 @@ export default function CatalogOptionsPage() {
     setDiscounts(next); persist(metals, types, next)
   }
 
+  function saveVolEdits() {
+    const next = volEdits
+      .map(e => ({ minQty: parseInt(e.minQty), pct: parseFloat(e.pct) }))
+      .filter(d => !isNaN(d.minQty) && !isNaN(d.pct) && d.minQty > 0 && d.pct > 0 && d.pct < 100)
+      .sort((a, b) => a.minQty - b.minQty)
+    setVolumeDiscounts(next)
+    persist(metals, types, discounts, undefined, undefined, next)
+  }
+
+  function addVolDiscount() {
+    const minQty = parseInt(newVolQty)
+    const pct    = parseFloat(newVolPct)
+    if (!minQty || !pct || minQty <= 0 || pct <= 0 || pct >= 100) return
+    const next = [...volumeDiscounts.filter(d => d.minQty !== minQty), { minQty, pct }]
+      .sort((a, b) => a.minQty - b.minQty)
+    setVolumeDiscounts(next); persist(metals, types, discounts, undefined, undefined, next)
+    setNewVolQty(''); setNewVolPct('')
+  }
+
+  function removeVolDiscount(minQty: number) {
+    const next = volumeDiscounts.filter(d => d.minQty !== minQty)
+    setVolumeDiscounts(next); persist(metals, types, discounts, undefined, undefined, next)
+  }
+
   return (
     <PublicLayout title="Catalog Settings — Miracle Coins">
       <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8 space-y-8">
@@ -182,6 +224,71 @@ export default function CatalogOptionsPage() {
           <h1 className="text-2xl font-bold text-stone-900">Catalog Settings</h1>
           {saved && <span className="text-sm font-medium text-green-600">Saved!</span>}
         </div>
+
+        {/* ── Volume Discounts ─────────────────────────────────────────────── */}
+        <section className="rounded-2xl border border-stone-200 bg-white p-6">
+          <h2 className="mb-1 text-base font-semibold text-stone-900">Volume Discounts</h2>
+          <p className="mb-5 text-sm text-stone-400">
+            Automatically discount orders when a customer buys multiple items. Applied at Stripe checkout.
+          </p>
+
+          <div className="mb-4 space-y-2">
+            {volumeDiscounts.map((d, i) => (
+              <div key={i} className="flex items-center gap-3 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3">
+                <div className="flex items-center gap-1.5 flex-1">
+                  <span className="text-sm text-stone-500">Buy</span>
+                  <div className="flex items-center rounded-lg border border-stone-200 bg-white overflow-hidden w-24">
+                    <input
+                      type="number" min="2" step="1"
+                      value={volEdits[i]?.minQty ?? ''}
+                      onChange={e => setVolEdits(prev => prev.map((x, j) => j === i ? { ...x, minQty: e.target.value } : x))}
+                      className="w-full px-3 py-1.5 text-sm bg-transparent focus:outline-none"
+                    />
+                  </div>
+                  <span className="text-sm text-stone-500">+ items →</span>
+                  <div className="flex items-center rounded-lg border border-stone-200 bg-white overflow-hidden w-24">
+                    <input
+                      type="number" min="1" max="99" step="0.5"
+                      value={volEdits[i]?.pct ?? ''}
+                      onChange={e => setVolEdits(prev => prev.map((x, j) => j === i ? { ...x, pct: e.target.value } : x))}
+                      className="w-full px-2 py-1.5 text-sm bg-transparent focus:outline-none text-right"
+                    />
+                    <span className="pr-2 text-sm text-stone-400">%</span>
+                  </div>
+                  <span className="text-sm font-medium text-green-700">off</span>
+                </div>
+                <button onClick={() => removeVolDiscount(d.minQty)} className="text-stone-300 hover:text-red-400 transition-colors flex-shrink-0">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+            {volumeDiscounts.length > 0 && (
+              <button onClick={saveVolEdits} disabled={saving} className="rounded-full bg-amber-500 px-5 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50 transition-colors">
+                {saving ? 'Saving…' : 'Save changes'}
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-stone-500">Buy</span>
+            <div className="flex items-center rounded-xl border border-stone-200 bg-stone-50 overflow-hidden w-24">
+              <input type="number" min="2" step="1" value={newVolQty} onChange={e => setNewVolQty(e.target.value)} placeholder="5"
+                className="w-full px-3 py-2 text-sm bg-transparent focus:outline-none" />
+            </div>
+            <span className="text-sm text-stone-500">+ items →</span>
+            <div className="flex items-center rounded-xl border border-stone-200 bg-stone-50 overflow-hidden w-24">
+              <input type="number" min="1" max="99" step="0.5" value={newVolPct} onChange={e => setNewVolPct(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addVolDiscount()} placeholder="5"
+                className="w-full px-2 py-2 text-sm bg-transparent focus:outline-none text-right" />
+              <span className="pr-2 text-sm text-stone-400">%</span>
+            </div>
+            <span className="text-sm text-stone-500">off</span>
+            <button onClick={addVolDiscount} className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 transition-colors">Add</button>
+          </div>
+          <p className="mt-2 text-xs text-stone-400">e.g. Buy 3 or more items → 3% off the entire order</p>
+        </section>
 
         {/* ── Order Discounts ──────────────────────────────────────────────── */}
         <section className="rounded-2xl border border-stone-200 bg-white p-6">

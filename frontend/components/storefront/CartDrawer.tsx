@@ -6,6 +6,7 @@ const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1270/api/v1'
 const FRONTEND_BASE = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:8100'
 
 interface DiscountTier { minTotal: number; pct: number }
+interface VolumeTier   { minQty: number;  pct: number }
 
 interface Props {
   open: boolean
@@ -14,7 +15,8 @@ interface Props {
 
 export default function CartDrawer({ open, onClose }: Props) {
   const { items, count, total, removeItem, updateQty, clearCart } = useCart()
-  const [discounts, setDiscounts]       = useState<DiscountTier[]>([])
+  const [discounts, setDiscounts]             = useState<DiscountTier[]>([])
+  const [volumeDiscounts, setVolumeDiscounts] = useState<VolumeTier[]>([])
   const [inquiryMode, setInquiryMode]   = useState(false)
   const [admin, setAdmin]               = useState(false)
   const [authUser, setAuthUser]         = useState<ReturnType<typeof getAuth>>(null)
@@ -86,6 +88,7 @@ export default function CartDrawer({ open, onClose }: Props) {
       .then(r => r.json())
       .then(data => {
         if (data.discounts?.length) setDiscounts(data.discounts)
+        if (data.volume_discounts?.length) setVolumeDiscounts(data.volume_discounts)
         if (typeof data.inquiry_mode === 'boolean') setInquiryMode(data.inquiry_mode)
       })
       .catch(() => {})
@@ -389,28 +392,43 @@ export default function CartDrawer({ open, onClose }: Props) {
               </>
             ) : (
               <>
-                {/* Discount progress banner */}
+                {/* Discount / volume pricing banners */}
                 {(() => {
-                  if (!discounts.length) return null
-                  const sorted = [...discounts].sort((a, b) => a.minTotal - b.minTotal)
-                  const applied = [...sorted].reverse().find(d => total >= d.minTotal)
-                  const next = sorted.find(d => total < d.minTotal)
-                  if (applied) {
-                    const savings = (total * applied.pct / 100)
+                  const volSorted   = [...volumeDiscounts].sort((a, b) => a.minQty - b.minQty)
+                  const spendSorted = [...discounts].sort((a, b) => a.minTotal - b.minTotal)
+
+                  const volApplied   = [...volSorted].reverse().find(d => count >= d.minQty)
+                  const spendApplied = [...spendSorted].reverse().find(d => total >= d.minTotal)
+
+                  // Best applied discount
+                  const bestPct = Math.max(volApplied?.pct ?? 0, spendApplied?.pct ?? 0)
+                  if (bestPct > 0) {
+                    const savings = total * bestPct / 100
                     return (
                       <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-center">
-                        <p className="text-sm font-semibold text-green-700">{applied.pct}% discount applied at checkout</p>
+                        <p className="text-sm font-semibold text-green-700">{bestPct}% discount applied at checkout</p>
                         <p className="text-xs text-green-600 mt-0.5">You save ~${savings.toFixed(2)} on this order</p>
                       </div>
                     )
                   }
-                  if (next) {
-                    const needed = (next.minTotal - total).toFixed(2)
+
+                  // Next volume tier to unlock
+                  const volNext   = volSorted.find(d => count < d.minQty)
+                  const spendNext = spendSorted.find(d => total < d.minTotal)
+
+                  if (volNext || spendNext) {
                     return (
-                      <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-center">
-                        <p className="text-sm font-medium text-amber-700">
-                          Spend <span className="font-bold">${needed}</span> more for <span className="font-bold">{next.pct}% off</span> your order
-                        </p>
+                      <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 space-y-1">
+                        {volNext && (
+                          <p className="text-xs text-amber-700 text-center">
+                            Add <span className="font-bold">{volNext.minQty - count} more item{volNext.minQty - count !== 1 ? 's' : ''}</span> for <span className="font-bold">{volNext.pct}% off</span>
+                          </p>
+                        )}
+                        {spendNext && (
+                          <p className="text-xs text-amber-700 text-center">
+                            Spend <span className="font-bold">${(spendNext.minTotal - total).toFixed(2)}</span> more for <span className="font-bold">{spendNext.pct}% off</span>
+                          </p>
+                        )}
                       </div>
                     )
                   }

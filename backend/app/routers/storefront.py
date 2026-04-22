@@ -66,7 +66,12 @@ DEFAULT_OPTIONS = {
         {'value': 'card', 'label': 'Card'},
         {'value': 'bundle', 'label': 'Kit / Set'},
     ],
-    'discounts': [],   # [{minTotal: float, pct: float}]
+    'discounts': [],   # [{minTotal: float, pct: float}]  — spend-based
+    'volume_discounts': [   # [{minQty: int, pct: float}]  — quantity-based
+        {'minQty': 3,  'pct': 3},
+        {'minQty': 5,  'pct': 5},
+        {'minQty': 10, 'pct': 7},
+    ],
     'test_mode': False,
     'inquiry_mode': False,
 }
@@ -1510,6 +1515,7 @@ class ProductOptionsRequest(BaseModel):
     metals: Optional[List[Dict[str, Any]]] = None
     types: Optional[List[Dict[str, Any]]] = None
     discounts: Optional[List[Dict[str, Any]]] = None
+    volume_discounts: Optional[List[Dict[str, Any]]] = None
     test_mode: Optional[bool] = None
     inquiry_mode: Optional[bool] = None
 
@@ -1526,6 +1532,8 @@ async def update_product_options(
         opts['types'] = req.types
     if req.discounts is not None:
         opts['discounts'] = req.discounts
+    if req.volume_discounts is not None:
+        opts['volume_discounts'] = req.volume_discounts
     if req.test_mode is not None:
         opts['test_mode'] = req.test_mode
     if req.inquiry_mode is not None:
@@ -1605,15 +1613,31 @@ async def create_checkout_session(
             'quantity': item.qty,
         })
 
-    # Calculate order total and find applicable discount tier
+    # Calculate order total + qty and find best applicable discount tier
     order_total = sum(
         (float(by_id[item.product_id].computed_price or 0)) * item.qty
         for item in req.items
         if item.product_id in by_id
     )
+    total_qty = sum(item.qty for item in req.items)
     opts = load_product_options()
-    discount_tiers = sorted(opts.get('discounts', []), key=lambda d: d['minTotal'], reverse=True)
-    applicable = next((d for d in discount_tiers if order_total >= d['minTotal']), None)
+
+    # Dollar-threshold discounts
+    spend_tiers = sorted(opts.get('discounts', []), key=lambda d: d['minTotal'], reverse=True)
+    spend_applicable = next((d for d in spend_tiers if order_total >= d['minTotal']), None)
+
+    # Quantity-threshold (volume) discounts
+    vol_tiers = sorted(opts.get('volume_discounts', []), key=lambda d: d['minQty'], reverse=True)
+    vol_applicable = next((d for d in vol_tiers if total_qty >= d['minQty']), None)
+
+    # Use whichever gives a higher percent off
+    applicable = None
+    if spend_applicable and vol_applicable:
+        applicable = spend_applicable if spend_applicable['pct'] >= vol_applicable['pct'] else {'pct': vol_applicable['pct']}
+    elif spend_applicable:
+        applicable = spend_applicable
+    elif vol_applicable:
+        applicable = {'pct': vol_applicable['pct']}
 
     # Build session metadata for webhook order creation
     # For multi-item carts, store comma-separated list
