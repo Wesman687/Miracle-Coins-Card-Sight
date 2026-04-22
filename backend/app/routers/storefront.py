@@ -447,11 +447,10 @@ def get_ebay_sell_access_token() -> str:
 
 def infer_ebay_category_id(storefront: Dict[str, Any]) -> str:
     metal = storefront.get('metal', '')
-    # eBay policy: grain items must be listed in Bullion > {Metal} > Other
-    # Coins & Paper Money > Bullion > Gold > Other: 39486
-    # Coins & Paper Money > Bullion > Silver > Other: 39484
-    # Coins & Paper Money > Bullion > Platinum > Other: 39491
-    return {'gold': '39486', 'platinum': '39491', 'silver': '39484'}.get(metal, '39486')
+    # Confirmed eBay US leaf category IDs for precious metal bullion:
+    # Gold: 39486, Silver: 39484, Palladium: 39492
+    # Platinum 39491 is a PARENT — leaf sub-categories vary; use 39487 (Platinum Bars & Rounds)
+    return {'gold': '39486', 'platinum': '39487', 'silver': '39484', 'palladium': '39492'}.get(metal, '39486')
 
 
 def build_ebay_listing_payload(coin_row: Any, image_urls: List[str], overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -622,14 +621,41 @@ def publish_coin_to_ebay(coin_row: Any, image_urls: List[str], overrides: Option
         except Exception:
             pass
 
-    if existing_offer_id:
-        ebay_request('PUT', f"https://api.ebay.com/sell/inventory/v1/offer/{existing_offer_id}", token, offer_base)
-        publish_result = ebay_request('POST', f"https://api.ebay.com/sell/inventory/v1/offer/{existing_offer_id}/publish", token, {})
-        offer_id = existing_offer_id
-    else:
-        offer_result = ebay_request('POST', 'https://api.ebay.com/sell/inventory/v1/offer', token, offer_base)
-        offer_id = offer_result.get('offerId')
-        publish_result = ebay_request('POST', f"https://api.ebay.com/sell/inventory/v1/offer/{offer_id}/publish", token, {})
+    def _do_offer_and_publish(cat_id: str):
+        ob = {**offer_base, 'categoryId': cat_id}
+        if existing_offer_id:
+            ebay_request('PUT', f"https://api.ebay.com/sell/inventory/v1/offer/{existing_offer_id}", token, ob)
+            result = ebay_request('POST', f"https://api.ebay.com/sell/inventory/v1/offer/{existing_offer_id}/publish", token, {})
+            return existing_offer_id, result
+        else:
+            offer_result = ebay_request('POST', 'https://api.ebay.com/sell/inventory/v1/offer', token, ob)
+            oid = offer_result.get('offerId')
+            result = ebay_request('POST', f"https://api.ebay.com/sell/inventory/v1/offer/{oid}/publish", token, {})
+            return oid, result
+
+    try:
+        offer_id, publish_result = _do_offer_and_publish(payload['category_id'])
+    except HTTPException as exc:
+        # If the category is not a leaf, query eBay taxonomy for a suggestion and retry once
+        if 'not a leaf category' in str(exc.detail).lower() or 'invalid category' in str(exc.detail).lower():
+            try:
+                tax_url = f"https://api.ebay.com/commerce/taxonomy/v1/category_tree/0/get_category_suggestions?q={urllib.parse.quote(payload['title'])}"
+                tax_req = urllib.request.Request(tax_url, headers={'Authorization': f'Bearer {token}', 'Accept': 'application/json'})
+                with urllib.request.urlopen(tax_req, timeout=10) as r:
+                    suggestions = json.loads(r.read().decode()).get('categorySuggestions', [])
+                if suggestions:
+                    leaf_id = suggestions[0]['category']['categoryId']
+                    import logging as _log
+                    _log.getLogger('uvicorn').info(f'[eBay] category {payload["category_id"]} not a leaf — retrying with suggested {leaf_id}')
+                    offer_id, publish_result = _do_offer_and_publish(leaf_id)
+                else:
+                    raise
+            except HTTPException:
+                raise
+            except Exception:
+                raise exc
+        else:
+            raise
 
     listing = publish_result.get('listing', {}) if isinstance(publish_result, dict) else {}
     return {
