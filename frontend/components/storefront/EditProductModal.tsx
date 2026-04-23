@@ -72,6 +72,8 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
 
   const [metals, setMetals] = useState<MetalOption[]>(DEFAULT_METALS)
   const [types, setTypes] = useState<TypeOption[]>(DEFAULT_TYPES)
+  const [bundleBasePrice, setBundleBasePrice] = useState<number | null>(null)
+  const [bundleOfferPrice, setBundleOfferPrice] = useState<number | null>(null)
 
   const [imageStage, setImageStage] = useState<ImageStage>('current')
   const [rawSrc, setRawSrc] = useState<string | null>(null)
@@ -144,6 +146,8 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
       .then(data => {
         if (data.metals?.length) setMetals(data.metals)
         if (data.types?.length) setTypes(data.types)
+        if (data.bundleBasePrice != null) setBundleBasePrice(data.bundleBasePrice)
+        if (data.bundleOfferPrice != null) setBundleOfferPrice(data.bundleOfferPrice)
       })
       .catch(() => {})
   }, [])
@@ -233,12 +237,14 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
     setError(null)
     try {
       const primaryMetal = metals.find(m => m.value === selectedMetals[0])
+      const isBundle = productType === 'bundle'
+      const standardPrice = isBundle ? bundleBasePrice : (primaryMetal?.basePrice ?? null)
+      const standardOffer = isBundle ? bundleOfferPrice : (primaryMetal?.offerPrice ?? null)
       const effectivePrice = useStandardPrice
-        ? (primaryMetal?.basePrice ?? null)
+        ? standardPrice
         : (price ? parseFloat(price) : null)
-      const metalOfferPrice = primaryMetal?.offerPrice ?? null
       const effectiveOfferPrice = useStandardOffer
-        ? (metalOfferPrice ?? 0)
+        ? (standardOffer ?? 0)
         : (offerPrice ? parseFloat(offerPrice) : 0)
       const res = await fetch(`${API}/storefront/products/${product.id}`, {
         method: 'PUT',
@@ -273,12 +279,14 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
     setEbayResult(null)
     try {
       const primaryMetal = metals.find(m => m.value === selectedMetals[0])
+      const isBundle = productType === 'bundle'
+      const standardPrice = isBundle ? bundleBasePrice : (primaryMetal?.basePrice ?? null)
+      const standardOffer = isBundle ? bundleOfferPrice : (primaryMetal?.offerPrice ?? null)
       const effectivePrice = useStandardPrice
-        ? (primaryMetal?.basePrice ?? undefined)
+        ? (standardPrice ?? undefined)
         : (price ? parseFloat(price) : undefined)
-      const metalOfferPrice = primaryMetal?.offerPrice ?? undefined
       const effectiveOfferPrice = useStandardOffer
-        ? metalOfferPrice
+        ? (standardOffer ?? undefined)
         : (offerPrice ? parseFloat(offerPrice) : undefined)
       const res = await fetch(`${API}/storefront/products/${product.id}/ebay-publish`, {
         method: 'POST',
@@ -308,6 +316,9 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
   const currentImage = resolveImageUrl(newImageUrl || product.image)
   const primaryMetal = selectedMetals[0]
   const selectedMetal = metals.find(m => m.value === primaryMetal)
+  const isBundle = productType === 'bundle'
+  const effectiveStandardPrice = isBundle ? bundleBasePrice : (selectedMetal?.basePrice ?? null)
+  const effectiveStandardOffer = isBundle ? bundleOfferPrice : (selectedMetal?.offerPrice ?? null)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -499,7 +510,7 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
                   <label className="text-sm font-medium text-stone-700">Price ($)</label>
-                  {selectedMetal?.basePrice != null && (
+                  {effectiveStandardPrice != null && (
                     <label className="flex items-center gap-1.5 text-xs text-stone-500 cursor-pointer">
                       <input
                         type="checkbox"
@@ -511,9 +522,9 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
                     </label>
                   )}
                 </div>
-                {useStandardPrice && selectedMetal?.basePrice != null ? (
+                {useStandardPrice && effectiveStandardPrice != null ? (
                   <div className="flex items-center rounded-xl border border-stone-200 bg-stone-50 px-4 py-2.5 text-sm text-stone-500">
-                    ${selectedMetal.basePrice.toFixed(2)}
+                    ${effectiveStandardPrice.toFixed(2)}
                     <span className="ml-1.5 text-xs text-stone-400">(standard)</span>
                   </div>
                 ) : (
@@ -665,14 +676,12 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
             </label>
           </div>
           {allowOffers && (() => {
-            const primaryMetal = metals.find(m => m.value === selectedMetals[0])
-            const metalOfferPrice = primaryMetal?.offerPrice ?? null
             return (
               <div className="flex items-center gap-3 flex-wrap">
                 <label className="text-xs font-medium text-stone-500 w-24 flex-shrink-0">Min. offer</label>
-                {useStandardOffer && metalOfferPrice != null ? (
+                {useStandardOffer && effectiveStandardOffer != null ? (
                   <div className="flex items-center rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm text-stone-500 min-w-[6rem]">
-                    ${metalOfferPrice.toFixed(2)}
+                    ${effectiveStandardOffer.toFixed(2)}
                   </div>
                 ) : (
                   <div className="relative">
@@ -686,7 +695,7 @@ export default function EditProductModal({ product, onClose, onSaved }: Props) {
                     />
                   </div>
                 )}
-                {metalOfferPrice != null && (
+                {effectiveStandardOffer != null && (
                   <label className="flex items-center gap-1.5 text-xs text-stone-500 cursor-pointer">
                     <input
                       type="checkbox"
