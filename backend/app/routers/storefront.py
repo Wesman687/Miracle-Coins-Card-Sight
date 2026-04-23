@@ -964,15 +964,20 @@ async def bulk_set_metal(
         storefront = meta.get('storefront', {})
         storefront['metal'] = metal
         storefront['weightLabel'] = label
+        meta['storefront'] = storefront
         if base_price is not None:
             price_label = f'${float(base_price):.2f}'
             storefront['price'] = price_label
             storefront['priceValue'] = float(base_price)
-        meta['storefront'] = storefront
-        db.execute(
-            text("UPDATE coins SET shopify_metadata = :meta WHERE id = :id"),
-            {'meta': json.dumps(meta), 'id': pid}
-        )
+            db.execute(
+                text("UPDATE coins SET shopify_metadata = :meta, computed_price = :price WHERE id = :id"),
+                {'meta': json.dumps(meta), 'price': float(base_price), 'id': pid}
+            )
+        else:
+            db.execute(
+                text("UPDATE coins SET shopify_metadata = :meta WHERE id = :id"),
+                {'meta': json.dumps(meta), 'id': pid}
+            )
         updated += 1
     if updated:
         db.commit()
@@ -1819,17 +1824,19 @@ async def update_product_options(
             price_label = f'${float(base_price):.2f}'
             result = db.execute(text("""
                 UPDATE coins
-                SET shopify_metadata = jsonb_set(
-                    jsonb_set(shopify_metadata, '{storefront,price}', :price_label::jsonb),
-                    '{storefront,priceValue}', :price_value::jsonb
-                )
+                SET computed_price = :price_value,
+                    shopify_metadata = jsonb_set(
+                        jsonb_set(shopify_metadata, '{storefront,price}', :price_label::jsonb),
+                        '{storefront,priceValue}', :price_value_json::jsonb
+                    )
                 WHERE status = 'active'
                   AND shopify_metadata->'storefront'->>'metal' = :metal
                   AND COALESCE(shopify_metadata->'storefront'->>'productType', 'card') != 'bundle'
             """), {
                 'metal': metal_val,
+                'price_value': float(base_price),
                 'price_label': json.dumps(price_label),
-                'price_value': json.dumps(float(base_price)),
+                'price_value_json': json.dumps(float(base_price)),
             })
             repriced += result.rowcount
         if repriced:
