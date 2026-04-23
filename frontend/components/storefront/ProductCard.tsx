@@ -46,7 +46,7 @@ export default function ProductCard({ product, isAdmin, onEdit }: Props) {
     <div className="flex flex-col rounded-2xl border border-stone-200 bg-white shadow-sm hover:shadow-md transition-shadow overflow-hidden">
       <div className="relative aspect-[4/3] bg-stone-100 overflow-hidden">
         {image ? (
-          <img src={image} alt={product.name} className="w-full h-full object-cover" />
+          <img src={image} alt={product.name} className="w-full h-full object-contain" />
         ) : (
           <div className="flex items-center justify-center h-full text-stone-400 text-sm">No image</div>
         )}

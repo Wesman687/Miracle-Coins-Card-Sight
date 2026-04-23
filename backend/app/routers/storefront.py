@@ -947,6 +947,45 @@ async def bulk_set_unlimited(
     return {'updated': updated}
 
 
+@router.post('/storefront/products/bulk-fix-labels')
+async def bulk_fix_labels(
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_admin_token),
+):
+    """Fix weight labels for all products based on their metal type."""
+    def weight_label_for(metal: str) -> str:
+        m = metal.lower()
+        if m in ('silver', 'copper'):
+            return f'1 grain {m}'
+        return f'1/4 grain {m}'
+
+    rows = db.execute(text(
+        "SELECT id, shopify_metadata FROM coins WHERE status = 'active'"
+    )).fetchall()
+
+    updated = 0
+    for row in rows:
+        meta = parse_json(row.shopify_metadata, {})
+        storefront = meta.get('storefront', {})
+        metal = (storefront.get('metal') or '').lower()
+        if not metal:
+            continue
+        label = weight_label_for(metal)
+        if storefront.get('weightLabel') == label:
+            continue
+        storefront['weightLabel'] = label
+        meta['storefront'] = storefront
+        db.execute(
+            text("UPDATE coins SET shopify_metadata = :meta WHERE id = :id"),
+            {'meta': json.dumps(meta), 'id': row.id}
+        )
+        updated += 1
+
+    if updated:
+        db.commit()
+    return {'updated': updated}
+
+
 @router.post('/storefront/products/bulk-delete')
 async def bulk_delete_products(
     req: BulkDeleteRequest,
@@ -1708,6 +1747,7 @@ class ProductOptionsRequest(BaseModel):
 @router.put('/storefront/options')
 async def update_product_options(
     req: ProductOptionsRequest,
+    db: Session = Depends(get_db),
     _: str = Depends(verify_admin_token),
 ):
     opts = load_product_options()
@@ -1724,7 +1764,35 @@ async def update_product_options(
     if req.inquiry_mode is not None:
         opts['inquiry_mode'] = req.inquiry_mode
     save_product_options(opts)
-    return opts
+
+    # Auto-reprice non-bundle products to match updated metal base prices
+    repriced = 0
+    if req.metals is not None:
+        for metal_opt in req.metals:
+            metal_val = (metal_opt.get('value') or '').lower()
+            base_price = metal_opt.get('basePrice')
+            if not metal_val or base_price is None:
+                continue
+            price_label = f'${float(base_price):.2f}'
+            result = db.execute(text("""
+                UPDATE coins
+                SET shopify_metadata = jsonb_set(
+                    jsonb_set(shopify_metadata, '{storefront,price}', :price_label::jsonb),
+                    '{storefront,priceValue}', :price_value::jsonb
+                )
+                WHERE status = 'active'
+                  AND shopify_metadata->'storefront'->>'metal' = :metal
+                  AND COALESCE(shopify_metadata->'storefront'->>'productType', 'card') != 'bundle'
+            """), {
+                'metal': metal_val,
+                'price_label': json.dumps(price_label),
+                'price_value': json.dumps(float(base_price)),
+            })
+            repriced += result.rowcount
+        if repriced:
+            db.commit()
+
+    return {**opts, 'repriced': repriced}
 
 
 # ---------------------------------------------------------------------------

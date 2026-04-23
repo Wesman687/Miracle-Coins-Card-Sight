@@ -367,7 +367,7 @@ export default function CatalogOptionsPage() {
         {/* ── Metal Types ──────────────────────────────────────────────────── */}
         <section className="rounded-2xl border border-stone-200 bg-white p-6">
           <h2 className="mb-1 text-base font-semibold text-stone-900">Metal Types</h2>
-          <p className="mb-1 text-sm text-stone-400">Set pricing defaults per metal. New products will use these automatically.</p>
+          <p className="mb-1 text-sm text-stone-400">Set pricing defaults per metal. Saving will reprice all existing products of that metal automatically.</p>
           <div className="mb-4 grid grid-cols-3 gap-2 text-xs font-medium text-stone-400 uppercase tracking-wider px-3">
             <span>Metal</span>
             <span>Price</span>

@@ -36,6 +36,24 @@ export default function ManagePage() {
   const [editProduct, setEditProduct] = useState<Product | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [fixingLabels, setFixingLabels] = useState(false)
+
+  async function fixLabels() {
+    setFixingLabels(true)
+    try {
+      const res = await fetch(`${API}/storefront/products/bulk-fix-labels`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      const data = await res.json()
+      alert(`Updated ${data.updated} weight labels.`)
+      await loadProducts()
+    } catch (e: any) {
+      alert('Failed: ' + e.message)
+    } finally {
+      setFixingLabels(false)
+    }
+  }
 
   async function deleteAllVisible() {
     if (!products.length) return
@@ -140,6 +158,14 @@ export default function ManagePage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
             New Product
+          </button>
+
+          <button
+            onClick={fixLabels}
+            disabled={fixingLabels}
+            className="flex items-center gap-2 rounded-full border border-stone-300 px-5 py-2.5 text-sm font-medium text-stone-600 hover:border-amber-400 hover:text-amber-600 disabled:opacity-50 transition-colors"
+          >
+            {fixingLabels ? 'Fixing…' : 'Fix Labels'}
           </button>
 
           <a
