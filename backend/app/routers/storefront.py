@@ -1822,23 +1822,22 @@ async def update_product_options(
             if not metal_val or base_price is None:
                 continue
             price_label = f'${float(base_price):.2f}'
-            result = db.execute(text("""
-                UPDATE coins
-                SET computed_price = :price_value,
-                    shopify_metadata = jsonb_set(
-                        jsonb_set(shopify_metadata, '{storefront,price}', CAST(:price_label AS jsonb)),
-                        '{storefront,priceValue}', CAST(:price_value_json AS jsonb)
-                    )
+            rows = db.execute(text("""
+                SELECT id, shopify_metadata FROM coins
                 WHERE status = 'active'
                   AND shopify_metadata->'storefront'->>'metal' = :metal
                   AND COALESCE(shopify_metadata->'storefront'->>'productType', 'card') != 'bundle'
-            """), {
-                'metal': metal_val,
-                'price_value': float(base_price),
-                'price_label': json.dumps(price_label),
-                'price_value_json': json.dumps(float(base_price)),
-            })
-            repriced += result.rowcount
+            """), {'metal': metal_val}).fetchall()
+            for row in rows:
+                meta = parse_json(row.shopify_metadata, {})
+                storefront = meta.get('storefront', {})
+                storefront['price'] = price_label
+                storefront['priceValue'] = float(base_price)
+                meta['storefront'] = storefront
+                db.execute(text(
+                    "UPDATE coins SET computed_price = :price, shopify_metadata = :meta WHERE id = :id"
+                ), {'price': float(base_price), 'meta': json.dumps(meta), 'id': row.id})
+                repriced += 1
         if repriced:
             db.commit()
 
