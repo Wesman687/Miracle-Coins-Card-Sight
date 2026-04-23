@@ -37,6 +37,28 @@ export default function ManagePage() {
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [fixingLabels, setFixingLabels] = useState(false)
+  const [bulkMetal, setBulkMetal] = useState('')
+  const [settingMetal, setSettingMetal] = useState(false)
+
+  async function bulkSetMetal() {
+    if (!bulkMetal || !displayedProducts.length) return
+    if (!confirm(`Set metal to "${bulkMetal}" on all ${displayedProducts.length} visible products? This will also update their price and weight label.`)) return
+    setSettingMetal(true)
+    try {
+      const res = await fetch(`${API}/storefront/products/bulk-set-metal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ ids: displayedProducts.map(p => p.id), metal: bulkMetal }),
+      })
+      const data = await res.json()
+      alert(`Updated ${data.updated} products to ${bulkMetal}.`)
+      await loadProducts()
+    } catch (e: any) {
+      alert('Failed: ' + e.message)
+    } finally {
+      setSettingMetal(false)
+    }
+  }
 
   async function fixLabels() {
     setFixingLabels(true)
@@ -262,18 +284,39 @@ export default function ManagePage() {
 
         {/* Product list */}
         <section>
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4 flex flex-wrap items-center gap-3 justify-between">
             <h2 className="text-sm font-semibold text-stone-500 uppercase tracking-widest">
-              Products <span className="font-normal">({products.length})</span>
+              Products <span className="font-normal">({displayedProducts.length})</span>
             </h2>
-            {products.length > 0 && (
-              <button
-                onClick={deleteAllVisible}
-                disabled={bulkDeleting}
-                className="rounded-full border border-red-200 px-4 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 hover:border-red-400 disabled:opacity-50 transition-colors"
-              >
-                {bulkDeleting ? 'Deleting…' : `Delete all ${products.length}`}
-              </button>
+            {displayedProducts.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                  <select
+                    value={bulkMetal}
+                    onChange={e => setBulkMetal(e.target.value)}
+                    className="rounded-lg border border-stone-300 px-2 py-1 text-xs text-stone-700 focus:border-amber-400 focus:outline-none"
+                  >
+                    <option value="">Set metal…</option>
+                    {METAL_OPTIONS.map(m => (
+                      <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={bulkSetMetal}
+                    disabled={!bulkMetal || settingMetal}
+                    className="rounded-full border border-amber-300 px-3 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-40 transition-colors"
+                  >
+                    {settingMetal ? 'Setting…' : 'Apply to all'}
+                  </button>
+                </div>
+                <button
+                  onClick={deleteAllVisible}
+                  disabled={bulkDeleting}
+                  className="rounded-full border border-red-200 px-4 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 hover:border-red-400 disabled:opacity-50 transition-colors"
+                >
+                  {bulkDeleting ? 'Deleting…' : `Delete all ${displayedProducts.length}`}
+                </button>
+              </div>
             )}
           </div>
 

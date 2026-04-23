@@ -935,6 +935,49 @@ async def update_product(
 class BulkDeleteRequest(BaseModel):
     ids: List[int]
 
+class BulkSetMetalRequest(BaseModel):
+    ids: List[int]
+    metal: str
+
+@router.post('/storefront/products/bulk-set-metal')
+async def bulk_set_metal(
+    req: BulkSetMetalRequest,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_admin_token),
+):
+    """Set metal + re-derive weight label + reprice from options for a list of product IDs."""
+    metal = req.metal.lower()
+    opts = load_product_options()
+    metal_opt = next((m for m in opts.get('metals', []) if m['value'] == metal), {})
+    base_price = metal_opt.get('basePrice')
+
+    def weight_label_for(m: str) -> str:
+        return f'1 grain {m}' if m in ('silver', 'copper') else f'1/4 grain {m}'
+
+    label = weight_label_for(metal)
+    updated = 0
+    for pid in req.ids:
+        row = db.execute(text("SELECT id, shopify_metadata FROM coins WHERE id = :id"), {'id': pid}).fetchone()
+        if not row:
+            continue
+        meta = parse_json(row.shopify_metadata, {})
+        storefront = meta.get('storefront', {})
+        storefront['metal'] = metal
+        storefront['weightLabel'] = label
+        if base_price is not None:
+            price_label = f'${float(base_price):.2f}'
+            storefront['price'] = price_label
+            storefront['priceValue'] = float(base_price)
+        meta['storefront'] = storefront
+        db.execute(
+            text("UPDATE coins SET shopify_metadata = :meta WHERE id = :id"),
+            {'meta': json.dumps(meta), 'id': pid}
+        )
+        updated += 1
+    if updated:
+        db.commit()
+    return {'updated': updated}
+
 @router.post('/storefront/products/bulk-set-unlimited')
 async def bulk_set_unlimited(
     db: Session = Depends(get_db),
