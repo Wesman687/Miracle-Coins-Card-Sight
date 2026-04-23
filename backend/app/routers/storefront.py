@@ -1826,8 +1826,8 @@ async def update_product_options(
                 UPDATE coins
                 SET computed_price = :price_value,
                     shopify_metadata = jsonb_set(
-                        jsonb_set(shopify_metadata, '{storefront,price}', :price_label::jsonb),
-                        '{storefront,priceValue}', :price_value_json::jsonb
+                        jsonb_set(shopify_metadata, '{storefront,price}', CAST(:price_label AS jsonb)),
+                        '{storefront,priceValue}', CAST(:price_value_json AS jsonb)
                     )
                 WHERE status = 'active'
                   AND shopify_metadata->'storefront'->>'metal' = :metal
