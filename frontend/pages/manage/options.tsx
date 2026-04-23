@@ -47,6 +47,8 @@ export default function CatalogOptionsPage() {
 
   const [testMode, setTestMode]       = useState(false)
   const [inquiryMode, setInquiryMode] = useState(false)
+  const [bundleBasePrice, setBundleBasePrice] = useState('')
+  const [bundleOfferPrice, setBundleOfferPrice] = useState('')
 
   useEffect(() => {
     fetch(`${API}/storefront/options`)
@@ -58,6 +60,8 @@ export default function CatalogOptionsPage() {
         if (data.volume_discounts?.length) setVolumeDiscounts(data.volume_discounts)
         if (typeof data.test_mode === 'boolean') setTestMode(data.test_mode)
         if (typeof data.inquiry_mode === 'boolean') setInquiryMode(data.inquiry_mode)
+        if (data.bundleBasePrice != null) setBundleBasePrice(String(data.bundleBasePrice))
+        if (data.bundleOfferPrice != null) setBundleOfferPrice(String(data.bundleOfferPrice))
       })
       .catch(() => {})
   }, [])
@@ -126,6 +130,23 @@ export default function CatalogOptionsPage() {
     const next = !inquiryMode
     setInquiryMode(next)
     await persist(metals, types, discounts, undefined, next)
+  }
+
+  async function saveBundlePricing() {
+    setSaving(true); setSaved(false)
+    try {
+      const body: Record<string, number | undefined> = {}
+      if (bundleBasePrice) body.bundleBasePrice = parseFloat(bundleBasePrice)
+      if (bundleOfferPrice) body.bundleOfferPrice = parseFloat(bundleOfferPrice)
+      await fetch(`${API}/storefront/options`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify(body),
+      })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch {}
+    setSaving(false)
   }
 
   function saveMetalEdits() {
@@ -436,6 +457,35 @@ export default function CatalogOptionsPage() {
               <button onClick={addMetal} className="rounded-xl bg-stone-800 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700 transition-colors">Add</button>
             </div>
           </div>
+        </section>
+
+        {/* ── Kit / Bundle Pricing ────────────────────────────────────────── */}
+        <section className="rounded-2xl border border-stone-200 bg-white p-6">
+          <h2 className="mb-1 text-base font-semibold text-stone-900">Kit / Bundle Pricing</h2>
+          <p className="mb-5 text-sm text-stone-400">Standard price for kits that include all three metals. Saving will reprice all existing kits automatically.</p>
+
+          <div className="grid grid-cols-2 gap-4 mb-5">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-stone-500 uppercase tracking-wider">Price</label>
+              <div className="flex items-center rounded-xl border border-stone-200 bg-stone-50 overflow-hidden">
+                <span className="pl-3 text-sm text-stone-400">$</span>
+                <input type="number" min="0" step="0.01" value={bundleBasePrice} onChange={e => setBundleBasePrice(e.target.value)} placeholder="—"
+                  className="w-full px-2 py-2 text-sm bg-transparent focus:outline-none" />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-stone-500 uppercase tracking-wider">Min. Offer (eBay)</label>
+              <div className="flex items-center rounded-xl border border-stone-200 bg-stone-50 overflow-hidden">
+                <span className="pl-3 text-sm text-stone-400">$</span>
+                <input type="number" min="0" step="0.01" value={bundleOfferPrice} onChange={e => setBundleOfferPrice(e.target.value)} placeholder="—"
+                  className="w-full px-2 py-2 text-sm bg-transparent focus:outline-none" />
+              </div>
+            </div>
+          </div>
+
+          <button onClick={saveBundlePricing} disabled={saving || (!bundleBasePrice && !bundleOfferPrice)} className="rounded-full bg-amber-500 px-5 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50 transition-colors">
+            {saving ? 'Saving…' : 'Save & reprice all kits'}
+          </button>
         </section>
 
         {/* ── Developer / Test Mode ───────────────────────────────────────── */}

@@ -74,6 +74,8 @@ DEFAULT_OPTIONS = {
     ],
     'test_mode': False,
     'inquiry_mode': False,
+    'bundleBasePrice': None,
+    'bundleOfferPrice': None,
 }
 
 
@@ -1000,12 +1002,23 @@ async def bulk_fix_labels(
     db: Session = Depends(get_db),
     _: str = Depends(verify_admin_token),
 ):
-    """Fix weight labels for all products based on their metal type."""
+    """Fix weight labels for all products based on their metal type(s)."""
     def weight_label_for(metal: str) -> str:
         m = metal.lower()
-        if m in ('silver', 'copper'):
-            return f'1 grain {m}'
-        return f'1/4 grain {m}'
+        return f'1 grain {m}' if m in ('silver', 'copper') else f'1/4 grain {m}'
+
+    def bundle_label(metals: list) -> str:
+        """Build a combined label for kits, e.g. '1/4 grain gold, platinum & 1 grain silver'"""
+        quarter_grain = [m for m in metals if m.lower() not in ('silver', 'copper')]
+        one_grain = [m for m in metals if m.lower() in ('silver', 'copper')]
+        parts = []
+        if quarter_grain:
+            names = ', '.join(quarter_grain[:-1]) + (' & ' + quarter_grain[-1] if len(quarter_grain) > 1 else quarter_grain[0])
+            parts.append(f'1/4 grain {names}')
+        if one_grain:
+            names = ', '.join(one_grain[:-1]) + (' & ' + one_grain[-1] if len(one_grain) > 1 else one_grain[0])
+            parts.append(f'1 grain {names}')
+        return ' & '.join(parts)
 
     rows = db.execute(text(
         "SELECT id, shopify_metadata FROM coins WHERE status = 'active'"
@@ -1018,7 +1031,12 @@ async def bulk_fix_labels(
         metal = (storefront.get('metal') or '').lower()
         if not metal:
             continue
-        label = weight_label_for(metal)
+        product_type = (storefront.get('productType') or '').lower()
+        all_metals = storefront.get('metals') or [metal]
+        if product_type == 'bundle' and len(all_metals) > 1:
+            label = bundle_label(all_metals)
+        else:
+            label = weight_label_for(metal)
         if storefront.get('weightLabel') == label:
             continue
         storefront['weightLabel'] = label
@@ -1790,6 +1808,8 @@ class ProductOptionsRequest(BaseModel):
     volume_discounts: Optional[List[Dict[str, Any]]] = None
     test_mode: Optional[bool] = None
     inquiry_mode: Optional[bool] = None
+    bundleBasePrice: Optional[float] = None
+    bundleOfferPrice: Optional[float] = None
 
 
 @router.put('/storefront/options')
@@ -1811,6 +1831,10 @@ async def update_product_options(
         opts['test_mode'] = req.test_mode
     if req.inquiry_mode is not None:
         opts['inquiry_mode'] = req.inquiry_mode
+    if req.bundleBasePrice is not None:
+        opts['bundleBasePrice'] = req.bundleBasePrice
+    if req.bundleOfferPrice is not None:
+        opts['bundleOfferPrice'] = req.bundleOfferPrice
     save_product_options(opts)
 
     # Auto-reprice non-bundle products to match updated metal base prices
@@ -1839,6 +1863,28 @@ async def update_product_options(
                 ), {'price': float(base_price), 'meta': json.dumps(meta), 'id': row.id})
                 repriced += 1
         if repriced:
+            db.commit()
+
+    # Also reprice bundles if bundleBasePrice was provided
+    if req.bundleBasePrice is not None:
+        bundle_price = float(req.bundleBasePrice)
+        price_label = f'${bundle_price:.2f}'
+        rows = db.execute(text("""
+            SELECT id, shopify_metadata FROM coins
+            WHERE status = 'active'
+              AND shopify_metadata->'storefront'->>'productType' = 'bundle'
+        """)).fetchall()
+        for row in rows:
+            meta = parse_json(row.shopify_metadata, {})
+            storefront = meta.get('storefront', {})
+            storefront['price'] = price_label
+            storefront['priceValue'] = bundle_price
+            meta['storefront'] = storefront
+            db.execute(text(
+                "UPDATE coins SET computed_price = :price, shopify_metadata = :meta WHERE id = :id"
+            ), {'price': bundle_price, 'meta': json.dumps(meta), 'id': row.id})
+            repriced += 1
+        if rows:
             db.commit()
 
     return {**opts, 'repriced': repriced}
