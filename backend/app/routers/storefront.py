@@ -291,7 +291,9 @@ def to_storefront_record(coin_row: Any, image_urls: List[str], listing: Optional
         'slug': slug,
         'name': title,
         'metal': metal,
-        'weightLabel': storefront.get('weightLabel') or infer_weight_label(storefront, metal),
+        'weightLabel': ('1/4 grain gold, 1/4 grain platinum & 1 grain silver'
+                        if storefront.get('productType') == 'bundle'
+                        else storefront.get('weightLabel') or infer_weight_label(storefront, metal)),
         'description': description,
         'price': price_label,
         'priceValue': price_value,
@@ -1032,9 +1034,9 @@ async def bulk_fix_labels(
         if not metal:
             continue
         product_type = (storefront.get('productType') or '').lower()
-        all_metals = storefront.get('metals') or [metal]
-        if product_type == 'bundle' and len(all_metals) > 1:
-            label = bundle_label(all_metals)
+        if product_type == 'bundle':
+            # Kits always contain all three metals
+            label = '1/4 grain gold, 1/4 grain platinum & 1 grain silver'
         else:
             label = weight_label_for(metal)
         if storefront.get('weightLabel') == label:
